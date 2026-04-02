@@ -39,6 +39,78 @@ repo_root = Path(__file__).resolve().parents[1]
 out_base = repo_root / "results"
 
 
+@app.command()
+def read_random_network_data(ds_root: Path = None,
+                             target_g_conn: int = 2,
+                             use_igraph: bool = False,
+                             ) -> Path:
+
+    nodes = load_json(ds_root / "data" / "nodes.json")
+    edges = load_json(ds_root / "data" / "edges.json")
+    probs = load_json(ds_root / "data" / "probs.json")
+
+    G = build_graph(nodes, edges, probs)
+
+    print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+
+    # Decide the hub node (node with highest degree)
+    hub = max(G.degree, key=lambda x: x[1])
+    print(f"Hub node is {hub[0]} with degree {hub[1]}")
+
+    # Decide the destination node (node farthest from hub)
+    dist = nx.single_source_shortest_path_length(G, hub[0])
+    dest = max(dist.items(), key=lambda x: x[1])
+    print(f"Destination node is {dest[0]} at distance {dest[1]} from hub")
+
+    # assert hub and dest
+    od_pair = [k for k, v in nodes.items() if v['is_od']]
+    assert set(od_pair) == set([hub[0], dest[0]]), 'wrong graph'
+
+    # Build system function
+    if use_igraph:
+        print("Using igraph-accelerated system functions")
+        sys_func_conn = make_igraph_sfun_conn(G, hub[0], dest[0])
+        sys_func_global_conn = make_igraph_sfun_global_conn(G, target_g_conn)
+    else:
+        ## Connectivity of one origin-destination pair
+        sys_func_conn = lambda comps_st: eval_1od_connectivity(comps_st, G, hub[0], dest[0])
+
+        ## Global connectivity
+        def sys_func_global_conn_long(comps_st):
+            _, k, _ = eval_global_conn_k(comps_st, G)
+            sys_st = k
+            return k, sys_st, None
+
+        sys_func_global_conn = lambda comps_st: sys_func_global_conn_long(comps_st)
+
+    # System functions for TSUM (remove the minimum comps state, which provides little benefit in TSUM)
+    def rsr_wrapper(sys_func):
+        """Convert (k, sys_st (0/1), extra) -> (k, sys_st (0/1), None)."""
+        def f(comps_st):
+            k, sys_st, _ = sys_func(comps_st)
+            return k, sys_st, None
+        return f
+
+
+    # Return random graph data
+    rg_data = {
+        "nodes": nodes,
+        "edges": edges,
+        "probs": probs,
+        "hub": hub[0],
+        "dest": dest[0],
+        #"sys_func_conn_brc": brc_wrapper(sys_func_conn),
+        #"sys_func_global_conn_brc": brc_wrapper(sys_func_global_conn),
+        "sys_func_conn_rsr": rsr_wrapper(sys_func_conn),
+        "sys_func_global_conn_rsr": rsr_wrapper(sys_func_global_conn) if not use_igraph else sys_func_global_conn,
+        "graph": G
+    }
+
+    return ds_root, rg_data
+
+
+
+
 def generate_random_network_data(name: str = "rg",
                                  generator = "rg",
                                  generator_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.1},
@@ -85,7 +157,7 @@ def generate_random_network_data(name: str = "rg",
         else:
             print(f"No connected graph found after {max_tries} tries.")
             return None, None
-        
+
     else: # Just generate once with the given seed (which may or may not yield a connected graph)
         cfg = GenConfig(
             name=name,
@@ -148,7 +220,7 @@ def generate_random_network_data(name: str = "rg",
     def brc_wrapper(sys_func, func_option: str = "conn"):
         """Convert (k, sys_st (0/1), extra) -> (k, 's'/'f', None)."""
         assert func_option in ["conn", "global_conn"], f"Invalid func_option: {func_option}"
-        
+
         if func_option == "conn":
             def f(comps_st):
                 k, sys_st, info = sys_func(comps_st)
@@ -173,7 +245,7 @@ def generate_random_network_data(name: str = "rg",
             k, sys_st, _ = sys_func(comps_st)
             return k, sys_st, None
         return f
-    
+
     # Return random graph data
     rg_data = {
         "nodes": nodes,
@@ -362,7 +434,6 @@ def example4(
     )
 
 
-
 @app.command()
 def run_parallel(
     examples: str = typer.Argument("1,2,3,4", help="Comma-separated example numbers to run, e.g. '1,2,3,4'"),
@@ -435,6 +506,77 @@ def run_parallel(
         sys.exit(1)
     else:
         print(f"\nAll {len(procs)} examples completed successfully.")
+
+
+@app.command()
+def example_rg1_global_conn2(
+    n_workers: int = _common_opts['n_workers'],
+    devices: str = _common_opts['devices'],
+    n_sample: int = _common_opts['n_sample'],
+    sample_batch_size: int = _common_opts['sample_batch_size'],
+    max_search_loops: int = _common_opts['max_search_loops'],
+    use_igraph: bool = False,
+    save_every: int = 0,
+    output_str: str = typer.Option("", help="str for output folder"),
+):
+
+    ds_root = HOME.joinpath('../results/rg1/v1')
+    # Load existing rg1/v1 data
+    ds_root, rg_data = read_random_network_data(ds_root=ds_root, use_igraph=use_igraph, target_g_conn=2)
+
+    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
+    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
+    multi_devices = device_list if len(device_list) > 1 else None
+
+    row_names = list(rg_data['edges'].keys())
+    n_state = 2
+    probs = [[rg_data['probs'][n]['0']['p'], rg_data['probs'][n]['1']['p']] for n in row_names]
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+
+    common_kwargs = dict(
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_upper_st=2,
+        unk_prob_thres=1e-5,
+        unk_prob_opt='abs',
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
+        n_workers=n_workers,
+        devices=multi_devices,
+    )
+
+    extra = {}
+    if save_every > 0:
+        extra['save_every'] = save_every
+    #global_dir_name = global_conn_dir
+    rsr.run_rule_extraction_by_mcs(
+        sfun=rg_data['sys_func_global_conn_rsr'],
+        output_dir=ds_root / ("rsr_global" + output_str),
+        **common_kwargs,
+        **extra,
+    )
+    """
+    # Run TSUM
+    rsr.run_rule_extraction_by_mcs(
+        sfun=sys_func_global_conn_tsum,
+        global_dir_name = global_conn_dir,
+        output_dir=ds_root / global_dir_name,
+        probs=probs_tensor,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=2,
+        unk_prob_thres=1e-5,
+        unk_prob_opt='abs',
+        metrics_path = ds_root1 / "global_conn" / "metrics2.json",
+    #)
+        devices=devices, n_workers=n_workers, n_sample=n_sample,
+        sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
+        use_igraph=use_igraph,
+    )
+    """
+
 
 
 if __name__ == "__main__":
