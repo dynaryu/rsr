@@ -1,0 +1,6 @@
+#rules_geq_2.json filter=lfs diff=lfs merge=lfs -text
+#rules_geq_2.pt filter=lfs diff=lfs merge=lfs -text
+#*.json filter=lfs diff=lfs merge=lfs -text
+#*.pt filter=lfs diff=lfs merge=lfs -text
+communication/whats_rsr/results/rg1/v1/rsr_global_s2/rules_geq_2.json filter=lfs diff=lfs merge=lfs -text
+communication/whats_rsr/results/rg1/v1/rsr_global_s2/rules_geq_2.pt filter=lfs diff=lfs merge=lfs -text
