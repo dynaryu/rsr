@@ -1,2 +1,0 @@
-rules_geq_2.json filter=lfs diff=lfs merge=lfs -text
-rules_geq_2.pt filter=lfs diff=lfs merge=lfs -text
