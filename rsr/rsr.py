@@ -302,7 +302,7 @@ def minimise_lower_states_random(
     return min_rule, info
 
 
-def from_rule_dict_to_mat(rule_dict, row_names, max_st):
+def from_rule_dict_to_mat(rule_dict, row_names, max_st, device=None):
     """
     Convert a rule dictionary to a matrix representation.
 
@@ -315,7 +315,9 @@ def from_rule_dict_to_mat(rule_dict, row_names, max_st):
         mat (list): binary matrix with shape (n_comp, max_st)
 
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     mat = torch.zeros((len(row_names), max_st), dtype=torch.int32, device=device)
 
     for row, name in enumerate(row_names):  
@@ -1269,7 +1271,7 @@ def mask_from_first_one(
 
 def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
     _, _, n_state = rules_mat.shape
-    Rnew = from_rule_dict_to_mat(min_comps_st, row_names, n_state)
+    Rnew = from_rule_dict_to_mat(min_comps_st, row_names, n_state, device=rules_mat.device)
     is_Rnew_subset, are_Rset_subset = is_subset(Rnew, rules_mat)
 
     if is_Rnew_subset:
@@ -1311,7 +1313,7 @@ def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbos
     # Step 1: convert all new rules to matrices
     new_mats = []
     for rd in new_rules_dicts:
-        new_mats.append(from_rule_dict_to_mat(rd, row_names, n_state))
+        new_mats.append(from_rule_dict_to_mat(rd, row_names, n_state, device=device))
     new_batch = torch.stack(new_mats, dim=0)  # (N_new, n_var, n_state)
     n_new = new_batch.shape[0]
 
