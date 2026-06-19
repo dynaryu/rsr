@@ -1,0 +1,12 @@
+{
+ "Source": "0",
+ "Sink": "29",
+ "FailureThresholdDS": 2,
+ "DamageInput": {
+  "Type": "SampleFromRealizations",
+  "Parameters": {
+   "SampleSize": 5,
+   "SampleSeed": 1
+  }
+ }
+}

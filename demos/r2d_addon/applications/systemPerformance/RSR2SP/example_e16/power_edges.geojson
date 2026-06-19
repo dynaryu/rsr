@@ -1,0 +1,873 @@
+{
+ "type": "FeatureCollection",
+ "name": "power_edges",
+ "crs": {
+  "type": "name",
+  "properties": {
+   "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+  }
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 0,
+    "EndNode": 1,
+    "AIM_id": "line_0"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4143598,
+      34.144521
+     ],
+     [
+      -118.4140075,
+      34.1444662
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 0,
+    "EndNode": 8,
+    "AIM_id": "line_1"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4143598,
+      34.144521
+     ],
+     [
+      -118.4138327,
+      34.144553
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 0,
+    "EndNode": 7,
+    "AIM_id": "line_2"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4143598,
+      34.144521
+     ],
+     [
+      -118.4138267,
+      34.1444426
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 0,
+    "EndNode": 6,
+    "AIM_id": "line_3"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4143598,
+      34.144521
+     ],
+     [
+      -118.4138046,
+      34.1441535
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 1,
+    "EndNode": 7,
+    "AIM_id": "line_4"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4140075,
+      34.1444662
+     ],
+     [
+      -118.4138267,
+      34.1444426
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 1,
+    "EndNode": 8,
+    "AIM_id": "line_5"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4140075,
+      34.1444662
+     ],
+     [
+      -118.4138327,
+      34.144553
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 1,
+    "EndNode": 6,
+    "AIM_id": "line_6"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4140075,
+      34.1444662
+     ],
+     [
+      -118.4138046,
+      34.1441535
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 2,
+    "EndNode": 3,
+    "AIM_id": "line_7"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138019,
+      34.1433266
+     ],
+     [
+      -118.4137979,
+      34.1429364
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 2,
+    "EndNode": 4,
+    "AIM_id": "line_8"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138019,
+      34.1433266
+     ],
+     [
+      -118.4138006,
+      34.1437195
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 3,
+    "EndNode": 5,
+    "AIM_id": "line_9"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137979,
+      34.1429364
+     ],
+     [
+      -118.4138032,
+      34.1425224
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 4,
+    "EndNode": 6,
+    "AIM_id": "line_10"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138006,
+      34.1437195
+     ],
+     [
+      -118.4138046,
+      34.1441535
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 5,
+    "EndNode": 9,
+    "AIM_id": "line_11"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138032,
+      34.1425224
+     ],
+     [
+      -118.4137999,
+      34.1421045
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 6,
+    "EndNode": 7,
+    "AIM_id": "line_12"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138046,
+      34.1441535
+     ],
+     [
+      -118.4138267,
+      34.1444426
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 6,
+    "EndNode": 8,
+    "AIM_id": "line_13"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138046,
+      34.1441535
+     ],
+     [
+      -118.4138327,
+      34.144553
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 7,
+    "EndNode": 8,
+    "AIM_id": "line_14"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138267,
+      34.1444426
+     ],
+     [
+      -118.4138327,
+      34.144553
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 9,
+    "EndNode": 10,
+    "AIM_id": "line_15"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137999,
+      34.1421045
+     ],
+     [
+      -118.4137992,
+      34.1416977
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 10,
+    "EndNode": 12,
+    "AIM_id": "line_16"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137992,
+      34.1416977
+     ],
+     [
+      -118.4138046,
+      34.1412681
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 11,
+    "EndNode": 20,
+    "AIM_id": "line_17"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4301667,
+      34.1319543
+     ],
+     [
+      -118.4305438,
+      34.1318731
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 11,
+    "EndNode": 15,
+    "AIM_id": "line_18"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4301667,
+      34.1319543
+     ],
+     [
+      -118.4296413,
+      34.1316363
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 12,
+    "EndNode": 16,
+    "AIM_id": "line_19"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138046,
+      34.1412681
+     ],
+     [
+      -118.4138048,
+      34.1407349
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 13,
+    "EndNode": 18,
+    "AIM_id": "line_20"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4267447,
+      34.1311241
+     ],
+     [
+      -118.4272993,
+      34.1310787
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 13,
+    "EndNode": 22,
+    "AIM_id": "line_21"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4267447,
+      34.1311241
+     ],
+     [
+      -118.4262672,
+      34.1308255
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 14,
+    "EndNode": 19,
+    "AIM_id": "line_22"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4284318,
+      34.1313541
+     ],
+     [
+      -118.4288462,
+      34.1313715
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 14,
+    "EndNode": 17,
+    "AIM_id": "line_23"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4284318,
+      34.1313541
+     ],
+     [
+      -118.4278679,
+      34.1311763
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 15,
+    "EndNode": 21,
+    "AIM_id": "line_24"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4296413,
+      34.1316363
+     ],
+     [
+      -118.4292782,
+      34.1313918
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 16,
+    "EndNode": 23,
+    "AIM_id": "line_25"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4138048,
+      34.1407349
+     ],
+     [
+      -118.4137371,
+      34.1400687
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 17,
+    "EndNode": 18,
+    "AIM_id": "line_26"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4278679,
+      34.1311763
+     ],
+     [
+      -118.4272993,
+      34.1310787
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 19,
+    "EndNode": 21,
+    "AIM_id": "line_27"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4288462,
+      34.1313715
+     ],
+     [
+      -118.4292782,
+      34.1313918
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 20,
+    "EndNode": 24,
+    "AIM_id": "line_28"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4305438,
+      34.1318731
+     ],
+     [
+      -118.431096,
+      34.1317494
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 22,
+    "EndNode": 26,
+    "AIM_id": "line_29"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4262672,
+      34.1308255
+     ],
+     [
+      -118.4257127,
+      34.1305539
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 23,
+    "EndNode": 25,
+    "AIM_id": "line_30"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137371,
+      34.1400687
+     ],
+     [
+      -118.4137756,
+      34.139159
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 24,
+    "EndNode": 27,
+    "AIM_id": "line_31"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.431096,
+      34.1317494
+     ],
+     [
+      -118.4317953,
+      34.1319369
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 25,
+    "EndNode": 28,
+    "AIM_id": "line_32"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137756,
+      34.139159
+     ],
+     [
+      -118.4137748,
+      34.1387229
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 25,
+    "EndNode": 33,
+    "AIM_id": "line_33"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137756,
+      34.139159
+     ],
+     [
+      -118.4132803,
+      34.1388925
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 26,
+    "EndNode": 30,
+    "AIM_id": "line_34"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4257127,
+      34.1305539
+     ],
+     [
+      -118.4251091,
+      34.1303297
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 27,
+    "EndNode": 29,
+    "AIM_id": "line_35"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4317953,
+      34.1319369
+     ],
+     [
+      -118.4321759,
+      34.1320461
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 28,
+    "EndNode": 31,
+    "AIM_id": "line_36"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137748,
+      34.1387229
+     ],
+     [
+      -118.4137679,
+      34.1382818
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 28,
+    "EndNode": 33,
+    "AIM_id": "line_37"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137748,
+      34.1387229
+     ],
+     [
+      -118.4132803,
+      34.1388925
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 30,
+    "EndNode": 32,
+    "AIM_id": "line_38"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4251091,
+      34.1303297
+     ],
+     [
+      -118.424495,
+      34.1300814
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 31,
+    "EndNode": 34,
+    "AIM_id": "line_39"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.4137679,
+      34.1382818
+     ],
+     [
+      -118.4239894,
+      34.1301026
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "StartNode": 32,
+    "EndNode": 34,
+    "AIM_id": "line_40"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      -118.424495,
+      34.1300814
+     ],
+     [
+      -118.4239894,
+      34.1301026
+     ]
+    ]
+   }
+  }
+ ]
+}

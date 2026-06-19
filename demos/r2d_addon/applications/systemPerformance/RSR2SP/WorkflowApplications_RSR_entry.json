@@ -1,0 +1,10 @@
+{
+  "_comment": "Add this object to SimCenterBackendApplications/modules/Workflow/WorkflowApplications.json under SystemPerformanceApplications.Applications (alongside REWETRecovery and ResidualDemand).",
+  "Name": "RSR2SP",
+  "ExecutablePath": "applications/systemPerformance/RSR2SP/run_rsr_performance.py",
+  "ApplicationSpecificInputs": [
+    {"id": "nodeFile", "type": "path", "description": "path to the network nodes geojson file"},
+    {"id": "edgeFile", "type": "path", "description": "path to the network edges geojson file"},
+    {"id": "configFile", "type": "path", "description": "path to the RSR SystemPerformance configuration JSON (the ApplicationData block: Source, Sink, FailureThresholdDS, DamageInput)"}
+  ]
+}

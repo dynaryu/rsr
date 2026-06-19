@@ -1,0 +1,19 @@
+{
+  "_comment": "Replaces the empty SystemPerformance block in R2DExamples/E16ElectricPowerEarthquake/input.json. E16 currently has SystemPerformance.PowerNetwork.Application = 'None'. This turns on RSR. NOTE: E16 ships only point/polygon power assets with no connectivity, so you must also supply a node/edge topology (the ResidualDemand geojson format) -- referenced below.",
+  "SystemPerformance": {
+    "PowerNetwork": {
+      "Application": "RSR2SP",
+      "ApplicationData": {
+        "NetworkNodesGeojson": "{Current_Dir}/input_data/power_nodes.geojson",
+        "NetworkEdgesGeojson": "{Current_Dir}/input_data/power_edges.geojson",
+        "Source": "0",
+        "Sink": "12",
+        "FailureThresholdDS": 2,
+        "DamageInput": {
+          "Type": "SampleFromRealizations",
+          "Parameters": { "SampleSize": 5, "SampleSeed": 1 }
+        }
+      }
+    }
+  }
+}
