@@ -1,5 +1,6 @@
 {
   "_comment": "Replaces the empty SystemPerformance block in R2DExamples/E16ElectricPowerEarthquake/input.json. E16 currently has SystemPerformance.PowerNetwork.Application = 'None'. This turns on RSR. NOTE: E16 ships only point/polygon power assets with no connectivity, so you must also supply a node/edge topology (the ResidualDemand geojson format) -- referenced below.",
+  "_comment_mode": "Mode selects the pipeline: 'both' (default) extracts the reference rule set and applies it in one run; 'reference' only extracts+saves the model (rsr_reference_model.json); 'apply' only evaluates reliability from a saved model. To extract once and reuse: a first run with Mode='reference', then subsequent runs with Mode='apply' and Model set to the saved model's path. Model defaults to <runDir>/rsr_reference_model.json.",
   "SystemPerformance": {
     "PowerNetwork": {
       "Application": "RSR2SP",
@@ -9,6 +10,7 @@
         "Source": "0",
         "Sink": "12",
         "FailureThresholdDS": 2,
+        "Mode": "both",
         "DamageInput": {
           "Type": "SampleFromRealizations",
           "Parameters": { "SampleSize": 5, "SampleSeed": 1 }

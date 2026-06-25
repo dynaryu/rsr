@@ -1,27 +1,14 @@
 {
-  "p_disconnected_lower": 0.267568,
-  "p_disconnected_upper": 0.267568,
+  "p_disconnected_lower": 0.267428,
+  "p_disconnected_upper": 0.267428,
   "unknown_gap": 0.0,
-  "p_connected": 0.732432,
+  "p_connected": 0.732572,
+  "source": "GEN",
+  "sink": "LOAD",
   "n_cutsets": 11,
   "top_cutsets": [
     [
       "SUB_A",
-      "SUB_B"
-    ],
-    [
-      "L_B_BUS",
-      "L_G_A"
-    ],
-    [
-      "L_G_B",
-      "SUB_A"
-    ],
-    [
-      "BUS"
-    ],
-    [
-      "L_G_A",
       "SUB_B"
     ],
     [
@@ -36,16 +23,31 @@
       "L_BUS_LOAD"
     ],
     [
+      "BUS"
+    ],
+    [
+      "L_G_B",
+      "SUB_A"
+    ],
+    [
+      "L_G_A",
+      "SUB_B"
+    ],
+    [
       "L_G_A",
       "L_G_B"
     ],
     [
       "L_A_BUS",
-      "L_B_BUS"
+      "L_G_B"
+    ],
+    [
+      "L_B_BUS",
+      "L_G_A"
     ],
     [
       "L_A_BUS",
-      "L_G_B"
+      "L_B_BUS"
     ]
   ]
 }

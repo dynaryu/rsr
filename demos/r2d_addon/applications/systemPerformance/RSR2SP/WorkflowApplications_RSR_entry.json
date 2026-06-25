@@ -1,10 +1,11 @@
 {
-  "_comment": "Add this object to SimCenterBackendApplications/modules/Workflow/WorkflowApplications.json under SystemPerformanceApplications.Applications (alongside REWETRecovery and ResidualDemand).",
+  "_comment": "Add this object to SimCenterBackendApplications/modules/Workflow/WorkflowApplications.json under SystemPerformanceApplications.Applications (alongside REWETRecovery and ResidualDemand). The two-pipeline split is driven by the ApplicationData's \"Mode\" (reference|apply|both) and optional \"Model\" keys, read from configFile like Source/Sink; \"model\" is also exposed below as a path input so a saved reference model can be staged for an apply-only run.",
   "Name": "RSR2SP",
   "ExecutablePath": "applications/systemPerformance/RSR2SP/run_rsr_performance.py",
   "ApplicationSpecificInputs": [
     {"id": "nodeFile", "type": "path", "description": "path to the network nodes geojson file"},
     {"id": "edgeFile", "type": "path", "description": "path to the network edges geojson file"},
-    {"id": "configFile", "type": "path", "description": "path to the RSR SystemPerformance configuration JSON (the ApplicationData block: Source, Sink, FailureThresholdDS, DamageInput)"}
+    {"id": "configFile", "type": "path", "description": "path to the RSR SystemPerformance configuration JSON (the ApplicationData block: Source, Sink, FailureThresholdDS, DamageInput, and the optional Mode/Model pipeline controls)"},
+    {"id": "model", "type": "path", "description": "optional path to a pre-extracted reference-model JSON (rsr_reference_model.json); written by a Mode='reference' run and read by a Mode='apply' run"}
   ]
 }

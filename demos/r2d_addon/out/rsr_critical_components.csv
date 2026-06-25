@@ -1,9 +1,9 @@
 component,single_point_of_failure,appears_in_n_cutsets,min_cutset_size
 SUB_A,False,3,2
 SUB_B,False,3,2
-L_B_BUS,False,3,2
-L_G_A,False,3,2
-L_G_B,False,3,2
 L_A_BUS,False,3,2
-BUS,True,1,1
+L_B_BUS,False,3,2
+L_G_B,False,3,2
+L_G_A,False,3,2
 L_BUS_LOAD,True,1,1
+BUS,True,1,1

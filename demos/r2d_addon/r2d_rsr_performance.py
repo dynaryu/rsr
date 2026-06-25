@@ -10,18 +10,32 @@ probabilities + a network topology and uses RSR to compute
   * the probability the network is disconnected (source -> load), with bounds, and
   * the minimal cut-sets -- the critical components whose joint failure disconnects the system.
 
-It runs at R2D's "Performance" stage (here as a standalone post-processor / Tier-1 integration;
-Tier-2 would register it as a workflow application). RSR's connectivity system function handles
-BOTH node failures (substations) and edge failures (lines).
+Two pipelines (run either or both, --mode):
+
+  1. REFERENCE-STATE ("model the system")  --mode reference
+     Extract the reusable cut-set / survival rule set for a network topology with RSR rule
+     extraction. Topology-dependent and probability-independent (the only expensive step), so
+     it is done once per system and saved as a reference model (rsr_reference_model.json).
+     The minimal cut-sets and component criticality are properties of this reference state.
+
+  2. APPLICATION ("apply the modelled system")  --mode apply
+     Given a saved reference model + a specific set of pelicun damage probabilities, evaluate
+     P(disconnected) with bounds by sampling and classifying against the saved rules -- cheap,
+     no re-extraction. Run this per hazard level / per realization.
+
+  --mode both (default) runs 1 then 2 in one shot (the original single-call behaviour).
 
 Self-contained demo (synthetic power network, no R2D data needed):
-    ~/Projects/rsr/.venv/bin/python r2d_performance.py --demo
+    ~/Projects/rsr/.venv/bin/python r2d_rsr_performance.py --demo
 
-Against real R2D output (verify the adapter field names against your R2D/pelicun version):
-    r2d_performance.py --damage <pelicun_DL.csv> --network <inventory.geojson> \
-        --source GEN_1 --sink LOAD_5 --out results/
+Reference model once, then apply to many R2D result dirs:
+    r2d_rsr_performance.py --mode reference --nodeFile nodes.geojson --edgeFile edges.geojson \
+        --source GEN_1 --sink LOAD_5 --out model/
+    r2d_rsr_performance.py --mode apply --model model/rsr_reference_model.json \
+        --runDir results_M7/ --out results_M7/
 
-Outputs: rsr_system_reliability.json, rsr_critical_components.csv
+Outputs: rsr_reference_model.json (+ rsr_critical_components.csv) from pipeline 1,
+         rsr_system_reliability.json from pipeline 2.
 """
 from __future__ import annotations
 import argparse, json, tempfile
@@ -30,7 +44,8 @@ import numpy as np
 import torch
 import networkx as nx
 
-from rsr.rsr import run_rule_extraction_by_mcs, from_rule_dict_to_mat
+from rsr.rsr import (run_rule_extraction_by_mcs, from_rule_dict_to_mat,
+                     sample_categorical, classify_samples)
 from rsr.igraph_sfun import make_igraph_sfun_conn
 
 
@@ -91,6 +106,11 @@ def load_network(nodes_geojson: Path, edges_geojson: Path, p_fail: dict):
 
     Failable nodes are node-split so every failable asset is an edge whose component id equals its
     R2D asset id -- linking straight to load_damage_probs(). Returns (G, edge_components).
+
+    NOTE: the topology (and thus the failable component set) defines the reference state, so the
+    same nodes/edges geojson must back both pipelines. `p_fail` is used here only to decide which
+    assets are failable; pass the union of all assets you may damage (an empty dict makes every
+    structural element failable, which is the safe default for a reference-only run).
     """
     def asset_id(props, idx):
         for k in ("AIM_id", "assetID", "asset_id", "id"):
@@ -137,25 +157,40 @@ def build_split_graph(nodes, edges):
 
 
 # ===========================================================================================
-# RSR core (generic)
+# PIPELINE 1 -- REFERENCE STATE: extract the reusable rule set (cut-sets) for a topology.
+# Topology-dependent, probability-independent: run once per system, save, reuse.
 # ===========================================================================================
-def run_rsr_connectivity(G, failable, p_fail, source, sink, device="cpu",
-                          n_sample=500_000, unk_thres=0.02):
-    """Build the connectivity sfun, run RSR rule extraction, return reliability + cut-sets."""
-    # Resolve source/sink: if the terminal substation was node-split it no longer exists as a
-    # plain node -- inject at its "__in" port, draw from the sink's "__out" port, so the
-    # terminal substations' own failures are on the path.
+def _resolve_ports(G, source, sink):
+    """If a terminal substation was node-split it no longer exists as a plain node -- inject at
+    its "__in" port and draw from the sink's "__out" port, so the terminal substations' own
+    failures sit on the path."""
     def _port(n, prefer):
         n = str(n)
         if n in G.nodes:
             return n
         cand = f"{n}__{prefer}"
         return cand if cand in G.nodes else n
-    source, sink = _port(source, "in"), _port(sink, "out")
+    return _port(source, "in"), _port(sink, "out")
+
+
+def extract_reference(G, failable, source, sink, p_fail_guide=None, device="cpu",
+                      n_sample=500_000, unk_thres=0.02):
+    """
+    Pipeline 1. Extract the reference state: the survival + failure (cut-set) rule sets for the
+    source->sink connectivity of `G`. Returns a reference-model dict (JSON-serialisable) that
+    apply_reference() consumes -- it carries the rules, the component order, and the
+    topology-only cut-sets/criticality.
+
+    `p_fail_guide` only steers RSR's importance sampling and the termination gap; the extracted
+    rules are valid for ANY probabilities. Pass representative damage probabilities when you have
+    them (tighter rule set for that regime); a uniform nominal 0.1 is used per component otherwise.
+    """
+    source, sink = _resolve_ports(G, source, sink)
     row_names = list(failable)
     n_state = 2                                   # binary: 0 = failed, 1 = functional
+    guide = p_fail_guide or {}
     # probs in RSR order: [P(state0=failed), P(state1=up)]
-    probs = torch.tensor([[p_fail.get(c, 0.0), 1.0 - p_fail.get(c, 0.0)] for c in row_names],
+    probs = torch.tensor([[guide.get(c, 0.1), 1.0 - guide.get(c, 0.1)] for c in row_names],
                          dtype=torch.float64, device=device)
 
     _base = make_igraph_sfun_conn(G, source, sink)    # sys_state 1 = connected (survival)
@@ -168,29 +203,30 @@ def run_rsr_connectivity(G, failable, p_fail, source, sink, device="cpu",
         rules_upper=[], rules_lower=[], unk_prob_thres=unk_thres, unk_prob_opt="rel",
         prob_update_every=100, n_sample=n_sample, sample_batch_size=100_000, max_rounds=3000,
         rule_update_verbose=False, output_dir=tempfile.mkdtemp())
-    rules_fail = json.load(open(res["rules_lower_path"]))
-    # Final probabilities live in the metrics log; the unknown gap brackets the answer.
-    # In RSR's naming the "lower" rule set is sys <= 0 (disconnected/failure).
-    metrics = res.get("metrics_log") or []
-    last = next((m for m in reversed(metrics) if m.get("p_lower") is not None), {})
-    p_disc = float(last.get("p_lower", np.nan))        # lower bound on P(disconnected)
-    p_unk = float(last.get("p_unknown", 0.0))          # the unknown gap
+    # RSR naming: "upper" rule set is sys >= 1 (survival/connected), "lower" is sys <= 0 (failure).
+    rules_upper = json.load(open(res["rules_upper_path"]))
+    rules_lower = json.load(open(res["rules_lower_path"]))
+    cutsets = cutsets_from_rules(rules_lower)
+    return {"n_state": n_state, "source": source, "sink": sink, "row_names": row_names,
+            "rules_upper": rules_upper, "rules_lower": rules_lower,
+            "n_cutsets": len(cutsets), "cutsets": cutsets,
+            "criticality": criticality(cutsets)}
 
-    # minimal cut-sets: components driving disconnection (drop the bookkeeping 'sys' key)
+
+def cutsets_from_rules(rules_lower):
+    """Minimal cut-sets = the failure rules' component sets (drop the bookkeeping 'sys' key)."""
     cutsets = []
-    for r in rules_fail:
+    for r in rules_lower:
         comps = sorted(c for c in r if c != "sys")
         if comps:
             cutsets.append(comps)
-    return {"p_disconnected_lower": p_disc, "p_disconnected_upper": p_disc + p_unk,
-            "unknown_gap": p_unk,
-            "p_connected": (1.0 - p_disc - p_unk) if np.isfinite(p_disc) else np.nan,
-            "n_cutsets": len(cutsets), "cutsets": cutsets}
+    return cutsets
 
 
 def criticality(cutsets):
     """Rank components: single-component cut-sets (single points of failure) first, then by
-    how many cut-sets they appear in."""
+    how many cut-sets they appear in. A property of the reference state (topology), not of any
+    particular damage scenario."""
     from collections import Counter
     spof = {c[0] for c in cutsets if len(c) == 1}
     freq = Counter(c for cs in cutsets for c in cs)
@@ -202,8 +238,70 @@ def criticality(cutsets):
     return rows
 
 
+def save_reference(reference, path):
+    Path(path).write_text(json.dumps(reference, indent=2))
+
+
+def load_reference(path):
+    return json.loads(Path(path).read_text())
+
+
 # ===========================================================================================
-def demo():
+# PIPELINE 2 -- APPLICATION: evaluate reliability for given damage probabilities by classifying
+# samples against a pre-extracted reference model. Cheap; no rule extraction.
+# ===========================================================================================
+def apply_reference(reference, p_fail, device="cpu", n_sample=500_000, sample_batch_size=100_000):
+    """
+    Pipeline 2. Apply a reference model (from extract_reference / load_reference) to a specific
+    set of per-component failure probabilities `p_fail` -> P(disconnected) with bounds.
+
+    Monte-Carlo: draw component states from `p_fail`, classify each against the saved survival
+    and failure rules. Proven-failed fraction is the lower bound on P(disconnected); the
+    unclassified ('unknown') fraction is the gap that brackets the answer.
+    """
+    row_names = reference["row_names"]
+    n_state = int(reference.get("n_state", 2))
+    probs = torch.tensor([[p_fail.get(c, 0.0), 1.0 - p_fail.get(c, 0.0)] for c in row_names],
+                         dtype=torch.float64, device=device)
+
+    def _mats(rule_list):
+        if not rule_list:
+            return torch.zeros((0,), device=device)
+        return torch.stack([from_rule_dict_to_mat(r, row_names, n_state, device=device)
+                            for r in rule_list])
+    up_mat = _mats(reference.get("rules_upper", []))
+    lo_mat = _mats(reference.get("rules_lower", []))
+
+    counts = {"upper": 0, "lower": 0, "unknown": 0}
+    drawn = 0
+    while drawn < n_sample:
+        b = min(sample_batch_size, n_sample - drawn)
+        c = classify_samples(sample_categorical(probs, b), up_mat, lo_mat)
+        for k in counts:
+            counts[k] += c[k]
+        drawn += b
+
+    p_disc = counts["lower"] / n_sample           # lower bound on P(disconnected)
+    p_unk = counts["unknown"] / n_sample          # the unknown gap
+    p_conn = counts["upper"] / n_sample           # lower bound on P(connected)
+    return {"p_disconnected_lower": p_disc, "p_disconnected_upper": p_disc + p_unk,
+            "unknown_gap": p_unk, "p_connected": p_conn}
+
+
+# ===========================================================================================
+# Convenience: both pipelines in one call (original single-shot interface; used by the Tier-2
+# run_rsr_performance.py app). Extract the reference at `p_fail`, then apply at the same `p_fail`.
+# ===========================================================================================
+def run_rsr_connectivity(G, failable, p_fail, source, sink, device="cpu",
+                         n_sample=500_000, unk_thres=0.02):
+    reference = extract_reference(G, failable, source, sink, p_fail_guide=p_fail, device=device,
+                                  n_sample=n_sample, unk_thres=unk_thres)
+    rel = apply_reference(reference, p_fail, device=device, n_sample=n_sample)
+    return {**rel, "n_cutsets": reference["n_cutsets"], "cutsets": reference["cutsets"]}
+
+
+# ===========================================================================================
+def _demo_inputs():
     """Synthetic redundant power network: GEN -> two parallel substation paths -> BUS -> LOAD."""
     nodes = [{"id": "GEN"}, {"id": "LOAD"},
              {"id": "SUB_A", "failable": True}, {"id": "SUB_B", "failable": True},
@@ -215,50 +313,103 @@ def demo():
     # synthetic P(fail) at one hazard level (what pelicun would supply per asset)
     p_fail = {"SUB_A": 0.30, "SUB_B": 0.30, "BUS": 0.05,
               "L_G_A": 0.10, "L_G_B": 0.10, "L_A_BUS": 0.10, "L_B_BUS": 0.10, "L_BUS_LOAD": 0.05}
-    print("DEMO: synthetic power network (GEN -> {SUB_A | SUB_B} -> BUS -> LOAD)")
-    return G, run_rsr_connectivity(G, comps, p_fail, "GEN", "LOAD")
+    return G, comps, p_fail, "GEN", "LOAD"
+
+
+def _write_criticality(reference, out: Path):
+    import csv
+    with open(out / "rsr_critical_components.csv", "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["component", "single_point_of_failure",
+                                          "appears_in_n_cutsets", "min_cutset_size"])
+        w.writeheader(); w.writerows(reference["criticality"])
+
+
+def _write_reliability(rel, reference, out: Path):
+    (out / "rsr_system_reliability.json").write_text(json.dumps(
+        rel | {"source": reference["source"], "sink": reference["sink"],
+               "n_cutsets": reference["n_cutsets"], "top_cutsets": reference["cutsets"][:20]},
+        indent=2))
+
+
+def _print_reference(reference, model_path: Path):
+    crit = reference["criticality"]
+    print(f"[reference] {reference['n_cutsets']} minimal cut-sets.  Single points of failure: "
+          f"{[r['component'] for r in crit if r['single_point_of_failure']] or 'none'}")
+    print("[reference] top critical components:")
+    for r in crit[:6]:
+        print(f"  {r['component']:12s} SPOF={r['single_point_of_failure']!s:5s} "
+              f"in {r['appears_in_n_cutsets']} cut-sets (min size {r['min_cutset_size']})")
+    print(f"[reference] wrote model: {model_path}")
+
+
+def _print_reliability(rel):
+    print(f"[apply] P(disconnected) in [{rel['p_disconnected_lower']:.4f}, "
+          f"{rel['p_disconnected_upper']:.4f}]  (unknown gap {rel['unknown_gap']:.4f})")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="RSR system-reliability add-on for R2D")
-    ap.add_argument("--demo", action="store_true")
-    ap.add_argument("--runDir", type=Path, help="R2D results dir holding Results_<rlz>.json")
+    ap = argparse.ArgumentParser(description="RSR system-reliability add-on for R2D (two pipelines)")
+    ap.add_argument("--mode", choices=["reference", "apply", "both"], default="both",
+                    help="reference: extract the reusable cut-set model from a topology; "
+                         "apply: evaluate reliability for damage probs using a saved model; "
+                         "both: extract then apply in one shot (default)")
+    ap.add_argument("--demo", action="store_true", help="run on a synthetic power network")
+    ap.add_argument("--runDir", type=Path, help="R2D results dir holding Results_<rlz>.json (damage probs)")
     ap.add_argument("--nodeFile", type=Path, help="Nodes geojson (R2D format)")
     ap.add_argument("--edgeFile", type=Path, help="Edges geojson (R2D format)")
     ap.add_argument("--source", type=str); ap.add_argument("--sink", type=str)
     ap.add_argument("--fail-from-ds", type=int, default=2)
+    ap.add_argument("--model", type=Path,
+                    help="reference-model JSON: written by --mode reference, read by --mode apply "
+                         "(default <out>/rsr_reference_model.json)")
     ap.add_argument("--out", type=Path, default=Path("."))
     a = ap.parse_args()
-
-    if a.demo:
-        _, out = demo()
-    else:
-        if not (a.runDir and a.nodeFile and a.edgeFile and a.source and a.sink):
-            ap.error("need --runDir, --nodeFile, --edgeFile, --source, --sink (or --demo)")
-        p_fail = load_damage_probs(a.runDir, a.fail_from_ds)
-        G, failable = load_network(a.nodeFile, a.edgeFile, p_fail)
-        out = run_rsr_connectivity(G, failable, p_fail, a.source, a.sink)
-
-    crit = criticality(out["cutsets"])
     a.out.mkdir(parents=True, exist_ok=True)
-    (a.out / "rsr_system_reliability.json").write_text(json.dumps(
-        {k: v for k, v in out.items() if k != "cutsets"} | {"top_cutsets": out["cutsets"][:20]},
-        indent=2))
-    import csv
-    with open(a.out / "rsr_critical_components.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["component", "single_point_of_failure",
-                                          "appears_in_n_cutsets", "min_cutset_size"])
-        w.writeheader(); w.writerows(crit)
+    model_path = a.model or (a.out / "rsr_reference_model.json")
 
-    print(f"\nP(disconnected) in [{out['p_disconnected_lower']:.4f}, "
-          f"{out['p_disconnected_upper']:.4f}]  (unknown gap {out['unknown_gap']:.4f})")
-    print(f"{out['n_cutsets']} minimal cut-sets.  Single points of failure: "
-          f"{[r['component'] for r in crit if r['single_point_of_failure']] or 'none'}")
-    print("Top critical components:")
-    for r in crit[:6]:
-        print(f"  {r['component']:12s} SPOF={r['single_point_of_failure']!s:5s} "
-              f"in {r['appears_in_n_cutsets']} cut-sets (min size {r['min_cutset_size']})")
-    print(f"\nWrote: {a.out/'rsr_system_reliability.json'}, {a.out/'rsr_critical_components.csv'}")
+    # ---- assemble inputs ----
+    G = failable = None
+    p_fail = {}
+    if a.demo:
+        G, failable, p_fail, source, sink = _demo_inputs()
+        print("DEMO: synthetic power network (GEN -> {SUB_A | SUB_B} -> BUS -> LOAD)")
+    else:
+        source, sink = a.source, a.sink
+        if a.runDir:
+            p_fail = load_damage_probs(a.runDir, a.fail_from_ds)
+        if a.mode in ("reference", "both"):
+            if not (a.nodeFile and a.edgeFile and source and sink):
+                ap.error("--mode reference/both need --nodeFile --edgeFile --source --sink")
+            if not a.runDir:
+                # load_network marks a node failable only if its asset id is in p_fail, so
+                # without --runDir the failable-asset inventory is empty and only lines would
+                # fail -- a silently wrong reference model. Require the inventory explicitly.
+                ap.error("--mode reference/both need --runDir to enumerate the failable-asset "
+                         "inventory (its damage probs only steer sampling); use --demo for the "
+                         "synthetic network")
+            G, failable = load_network(a.nodeFile, a.edgeFile, p_fail)
+
+    # ---- pipeline 1: reference state (model the system) ----
+    reference = None
+    if a.mode in ("reference", "both"):
+        reference = extract_reference(G, failable, source, sink, p_fail_guide=p_fail or None)
+        save_reference(reference, model_path)
+        _write_criticality(reference, a.out)
+        _print_reference(reference, model_path)
+
+    # ---- pipeline 2: application (apply the modelled system) ----
+    if a.mode in ("apply", "both"):
+        if reference is None:                     # apply-only: load the pre-built model
+            if not model_path.exists():
+                ap.error(f"--mode apply needs a reference model; not found: {model_path}")
+            reference = load_reference(model_path)
+            _write_criticality(reference, a.out)
+        if not a.demo and not a.runDir:
+            ap.error("--mode apply/both need damage probs via --runDir (or --demo)")
+        rel = apply_reference(reference, p_fail)
+        _write_reliability(rel, reference, a.out)
+        _print_reliability(rel)
+        print(f"[apply] wrote: {a.out/'rsr_system_reliability.json'}")
 
 
 if __name__ == "__main__":
