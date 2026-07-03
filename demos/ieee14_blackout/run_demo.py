@@ -49,6 +49,7 @@ from pathlib import Path
 
 import torch
 import typer
+import pdb
 
 # Reference from the paper (Chan et al. 2024, Table 2, Scenario 1)
 REF_PF = 1.1e-4
@@ -139,10 +140,10 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
         stale.unlink()
 
     def _go():
-        return rsr.run_rule_extraction_by_mcs(
+        return rsr.run_ref_extraction_by_mcs(
             sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
             sys_upper_st=1,               # system states: 0 = blackout, 1 = survive
-            rules_upper=[], rules_lower=[],
+            refs_upper=[], refs_lower=[],
             unk_prob_thres=unk_thres, unk_prob_opt=unk_opt,
             n_sample=n_sample, max_rounds=max_rounds, sample_batch_size=batch,
             devices=multi_devices, output_dir=str(out),
@@ -392,6 +393,7 @@ def main(
     print(f"\nRepeating extraction x{runs} "
           f"(unknown gap < {unk_thres:g} [{unk_opt}], samples/round {n_sample:,})\n", flush=True)
     run_metrics = []
+    all_metrics = []          # full per-round metrics.json of every run, aggregated
     for i in range(runs):
         run_out = out / f"run_{i:02d}"
         print(f"[{i + 1}/{runs}] {run_out.name} ...", end="", flush=True)
@@ -400,10 +402,19 @@ def main(
         # keep per-run artifacts too (reliability + criticality)
         reliability, crit, _ = analyse(res, threshold, elapsed)
         save_artifacts(run_out, reliability, crit)
-        m = read_metrics(run_out / "metrics.json", elapsed)
+        metrics_path = run_out / "metrics.json"
+        m = read_metrics(metrics_path, elapsed)
         run_metrics.append(m)
+        # collect the full per-round metrics so all runs live in one file
+        rounds = [json.loads(ln) for ln in metrics_path.read_text().splitlines() if ln.strip()]
+        all_metrics.append({"run": i, "metrics": rounds})
         print(f" P(blackout)={m['p_blackout']:.3e}  gap={m['gap']:.1e}  "
               f"fail_rules={m['n_fail_rules']}  {elapsed:.1f}s")
+
+    all_metrics_path = out / "all_metrics.json"
+    with open(all_metrics_path, "w") as f:
+        json.dump(all_metrics, f, indent=2)
+    print(f"\n  Saved: {all_metrics_path}  (per-round metrics of all {runs} runs)")
 
     summarise(run_metrics, out)
 
