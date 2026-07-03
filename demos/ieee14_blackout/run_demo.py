@@ -199,8 +199,8 @@ def criticality(cutsets):
 
 def analyse(res, threshold, elapsed):
     """Turn an extraction result into the reliability dict + criticality ranking."""
-    rules_surv = json.load(open(res["rules_upper_path"]))
-    rules_fail = json.load(open(res["rules_lower_path"]))
+    rules_surv = json.load(open(res["refs_upper_path"]))
+    rules_fail = json.load(open(res["refs_lower_path"]))
     last = res["metrics_log"][-1]
     p_fail, p_surv, p_unk = last["p_lower"], last["p_upper"], last["p_unknown"]
 
@@ -276,8 +276,8 @@ def read_metrics(metrics_path: Path, runtime_s: float):
         "p_blackout": last["p_lower"],
         "p_survival": last["p_upper"],
         "gap": last["p_unknown"],
-        "n_surv_rules": last["n_rules_upper"],
-        "n_fail_rules": last["n_rules_lower"],
+        "n_surv_rules": last["n_refs_upper"],
+        "n_fail_rules": last["n_refs_lower"],
         "rounds": max(r.get("round", 0) for r in rows),
         "runtime_s": runtime_s,
     }
