@@ -49,7 +49,9 @@ def _minimize_one_unknown(args):
             sys_lower_st=sys_upper_st - 1, fval=fval)
         fval = info.get('final_sys_state', fval)
 
-    return min_comps_st, sys_st, fval
+    # 1 for the seed sfun(comps_st_test) call above + minimisation attempts
+    n_sfun = 1 + int(info.get('attempts', 0))
+    return min_comps_st, sys_st, fval, n_sfun
 
 # For use in mixted sorting 
 try:
@@ -96,7 +98,7 @@ def get_min_upper_comps_st(comps_st, sys_upper_st):
     return min_comps_st
 
 
-def minimise_upper_states_random(
+def minimise_upper_states_random_old(
     comps_st: Dict[str, int],
     sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
     sys_upper_st: int,
@@ -121,14 +123,11 @@ def minimise_upper_states_random(
     Stops when all components have been removed from the candidate pool.
 
     Returns:
-      final_state, info
-        - final_state: dict of the minimized states.
-        - info: {
-            'permutation': [...],
-            'removed_on_lower': [comp,...],
-            'hit_min_state': [comp,...],
-            'attempts': int,
-          }
+        Tuple ``(final_state, info)``:
+
+        - ``final_state``: dict of the minimised states.
+        - ``info``: dict with keys ``permutation``, ``removed_on_lower``,
+          ``hit_min_state``, ``attempts``.
     """
     rng = random.Random(seed)
 
@@ -194,12 +193,12 @@ def minimise_upper_states_random(
         'final_sys_state': fval
     }
 
-    min_rule = get_min_upper_comps_st(state, sys_upper_st)
+    min_ref = get_min_upper_comps_st(state, sys_upper_st)
 
-    return min_rule, info
+    return min_ref, info
 
 
-def minimise_lower_states_random(
+def minimise_lower_states_random_old(
     comps_st: Dict[str, int],
     sfun,
     sys_lower_st: int,
@@ -224,15 +223,11 @@ def minimise_lower_states_random(
     Stops when all components have been removed from the candidate pool.
 
     Returns:
-      final_state, info
-        - final_state: dict of the minimized states.
-        - info: {
-            'permutation': [...],
-            'removed_on_lower': [comp,...],
-            'hit_min_state': [comp,...],
-            'attempts': int,
-            'final_state': {comp: state,...}
-          }
+        Tuple ``(final_state, info)``:
+
+        - ``final_state``: dict of the minimised states.
+        - ``info``: dict with keys ``permutation``, ``removed_on_lower``,
+          ``hit_min_state``, ``attempts``, ``final_state``.
     """
     rng = random.Random(seed)
 
@@ -297,17 +292,303 @@ def minimise_lower_states_random(
         'final_sys_state': fval
     }
 
-    min_rule = get_min_lower_comps_st(state, max_state, sys_lower_st)
+    min_ref = get_min_lower_comps_st(state, max_state, sys_lower_st)
 
-    return min_rule, info
+    return min_ref, info
 
 
-def from_rule_dict_to_mat(rule_dict, row_names, max_st, device=None):
+def minimise_upper_states_random(
+    comps_st: Dict[str, int],
+    sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
+    sys_upper_st: int,
+    *,
+    fval: Optional[Any] = None,
+    min_state: int = 0,
+    step: int = 1,
+    seed: Optional[int] = None,
+    exclude_keys: Iterable[str] = ("sys",)
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
     """
-    Convert a rule dictionary to a matrix representation.
+    Random greedy reduction of component states (binary-search variant).
+
+    Like :func:`minimise_upper_states_random_old`, but each component is
+    resolved in a single visit instead of being lowered one ``step`` at a time
+    and revisited.  For a given component (all others held fixed) ``sfun`` is
+    monotone in that component's state, so the feasibility predicate
+    ``status >= sys_upper_st`` flips at most once as the state is lowered.  This
+    lets us find the *lowest* feasible state with an exponential (galloping)
+    bracketing pass followed by a binary search, using ``O(log m)`` ``sfun``
+    calls per component (``m`` = number of states) instead of ``O(m)``.  Across
+    ``n`` components the total cost is ``O(n * log m)``.
+
+    Component selection/ordering (random permutation, deque) is unchanged; only
+    the per-component state-lowering is now a binary search, after which the
+    component is removed from the candidate pool (no interleaved revisits).
+
+    Returns:
+        Tuple ``(final_state, info)``:
+
+        - ``final_state``: dict of the minimised states.
+        - ``info``: dict with keys ``permutation``, ``removed_on_lower``,
+          ``hit_min_state``, ``attempts``, ``final_state``, ``final_sys_state``.
+    """
+    rng = random.Random(seed)
+
+    # Work on a (shallow) copy; do NOT mutate caller's dict
+    state = dict(comps_st)
+
+    # Build candidate component key deque from a random permutation
+    candidates = [k for k, v in state.items()
+                  if k not in set(exclude_keys) and isinstance(v, int) and v > min_state]
+    rng.shuffle(candidates)
+    dq = deque(candidates)
+
+    removed_on_lower = []
+    hit_min_state = []
+    attempts = 0
+
+    while dq:
+        comp = dq[0]
+
+        # If already at/below min_state, remove and continue
+        if state[comp] <= min_state:
+            dq.popleft()
+            hit_min_state.append(comp)
+            continue
+
+        prev = state[comp]
+        fval_prev = fval
+        hi = prev          # lowest known-feasible value (current value is feasible)
+        hi_fval = fval     # fval at hi
+        lo = None          # highest known-infeasible value
+        delta = step
+        raised_exc = False
+
+        # --- exponential (galloping) bracketing toward min_state ---
+        while True:
+            trial = prev - delta
+            if trial <= min_state:
+                trial = min_state
+            state[comp] = trial
+            attempts += 1
+            try:
+                f, status, _ = sfun(state)
+            except Exception:
+                raised_exc = True
+                break
+            if status >= sys_upper_st:
+                # feasible: record and keep going lower
+                hi = trial
+                hi_fval = f
+                if trial == min_state:
+                    break
+                delta *= 2
+            else:
+                # first infeasible value brackets the crossover
+                lo = trial
+                break
+
+        # --- binary search within (lo infeasible, hi feasible) ---
+        if not raised_exc and lo is not None:
+            while True:
+                nsteps = (hi - lo) // step
+                if nsteps < 2:
+                    break
+                mid = hi - step * (nsteps // 2)
+                state[comp] = mid
+                attempts += 1
+                try:
+                    f, status, _ = sfun(state)
+                except Exception:
+                    raised_exc = True
+                    break
+                if status >= sys_upper_st:
+                    hi = mid
+                    hi_fval = f
+                else:
+                    lo = mid
+
+        if raised_exc:
+            # sfun failed: revert and drop the component
+            state[comp] = prev
+            fval = fval_prev
+            dq.popleft()
+            removed_on_lower.append(comp)
+            continue
+
+        # commit the lowest feasible value found
+        state[comp] = hi
+        fval = hi_fval
+        dq.popleft()
+        if hi == prev:
+            # could not be lowered at all
+            removed_on_lower.append(comp)
+        elif hi <= min_state:
+            hit_min_state.append(comp)
+
+    info = {
+        'permutation': candidates,
+        'removed_on_lower': removed_on_lower,
+        'hit_min_state': hit_min_state,
+        'attempts': attempts,
+        'final_state': state,
+        'final_sys_state': fval
+    }
+
+    min_ref = get_min_upper_comps_st(state, sys_upper_st)
+
+    return min_ref, info
+
+
+def minimise_lower_states_random(
+    comps_st: Dict[str, int],
+    sfun,
+    sys_lower_st: int,
+    max_state: int,
+    *,
+    fval: Optional[Any] = None,
+    step: int = 1,
+    seed: Optional[int] = None,
+    exclude_keys: Iterable[str] = ("sys",)
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    """
+    Random greedy reduction of component states (binary-search variant).
+
+    Like :func:`minimise_lower_states_random_old`, but each component is
+    resolved in a single visit instead of being raised one ``step`` at a time
+    and revisited.  For a given component (all others held fixed) ``sfun`` is
+    monotone in that component's state, so the feasibility predicate
+    ``status <= sys_lower_st`` flips at most once as the state is raised.  This
+    lets us find the *highest* feasible state with an exponential (galloping)
+    bracketing pass followed by a binary search, using ``O(log m)`` ``sfun``
+    calls per component (``m`` = number of states) instead of ``O(m)``.  Across
+    ``n`` components the total cost is ``O(n * log m)``.
+
+    Component selection/ordering (random permutation, deque) is unchanged; only
+    the per-component state-raising is now a binary search, after which the
+    component is removed from the candidate pool (no interleaved revisits).
+
+    Returns:
+        Tuple ``(final_state, info)``:
+
+        - ``final_state``: dict of the minimised states.
+        - ``info``: dict with keys ``permutation``, ``removed_on_upper``,
+          ``hit_min_state``, ``attempts``, ``final_state``, ``final_sys_state``.
+    """
+    rng = random.Random(seed)
+
+    # Work on a copy; do NOT mutate caller's dict
+    state = dict(comps_st)
+
+    # Build candidate deque from a random permutation
+    candidates = [k for k, v in state.items()
+                  if k not in set(exclude_keys) and isinstance(v, int) and v < max_state]
+    rng.shuffle(candidates)
+    dq = deque(candidates)
+
+    removed_on_upper = []
+    hit_min_state = []
+    attempts = 0
+
+    while dq:
+        comp = dq[0]
+
+        # If already at/above max_state, remove and continue
+        if state.get(comp, max_state) >= max_state:
+            dq.popleft()
+            hit_min_state.append(comp)
+            continue
+
+        prev = state[comp]
+        fval_prev = fval
+        lo = prev          # highest known-feasible value (current value is feasible)
+        lo_fval = fval     # fval at lo
+        hi = None          # lowest known-infeasible value
+        delta = step
+        raised_exc = False
+
+        # --- exponential (galloping) bracketing toward max_state ---
+        while True:
+            trial = prev + delta
+            if trial >= max_state:
+                trial = max_state
+            state[comp] = trial
+            attempts += 1
+            try:
+                f, status, _ = sfun(state)
+            except Exception:
+                raised_exc = True
+                break
+            if status <= sys_lower_st:
+                # feasible: record and keep going higher
+                lo = trial
+                lo_fval = f
+                if trial == max_state:
+                    break
+                delta *= 2
+            else:
+                # first infeasible value brackets the crossover
+                hi = trial
+                break
+
+        # --- binary search within (lo feasible, hi infeasible) ---
+        if not raised_exc and hi is not None:
+            while True:
+                nsteps = (hi - lo) // step
+                if nsteps < 2:
+                    break
+                mid = lo + step * (nsteps // 2)
+                state[comp] = mid
+                attempts += 1
+                try:
+                    f, status, _ = sfun(state)
+                except Exception:
+                    raised_exc = True
+                    break
+                if status <= sys_lower_st:
+                    lo = mid
+                    lo_fval = f
+                else:
+                    hi = mid
+
+        if raised_exc:
+            # sfun failed: revert and drop the component
+            state[comp] = prev
+            fval = fval_prev
+            dq.popleft()
+            removed_on_upper.append(comp)
+            continue
+
+        # commit the highest feasible value found
+        state[comp] = lo
+        fval = lo_fval
+        dq.popleft()
+        if lo == prev:
+            # could not be raised at all
+            removed_on_upper.append(comp)
+        elif lo >= max_state:
+            hit_min_state.append(comp)
+
+    info = {
+        'permutation': candidates,
+        'removed_on_upper': removed_on_upper,
+        'hit_min_state': hit_min_state,
+        'attempts': attempts,
+        'final_state': state,
+        'final_sys_state': fval
+    }
+
+    min_ref = get_min_lower_comps_st(state, max_state, sys_lower_st)
+
+    return min_ref, info
+
+
+def from_ref_dict_to_mat(ref_dict, row_names, max_st):
+    """
+    Convert a ref dictionary to a matrix representation.
 
     Args:
-        rule_dict (dict): {name: ('comparison_operator', state (int))}
+        ref_dict (dict): {name: ('comparison_operator', state (int))}
         row_names (list): list of component names associated with each row in order
         max_st (int): the highest state
 
@@ -315,14 +596,12 @@ def from_rule_dict_to_mat(rule_dict, row_names, max_st, device=None):
         mat (list): binary matrix with shape (n_comp, max_st)
 
     """
-
-    if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     mat = torch.zeros((len(row_names), max_st), dtype=torch.int32, device=device)
 
     for row, name in enumerate(row_names):  
-        if name in rule_dict:
-            op, state = rule_dict[name]
+        if name in ref_dict:
+            op, state = ref_dict[name]
             if op == '<=':
                 mat[row, :state + 1] = 1
             elif op == '<':
@@ -541,7 +820,7 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
 
 
 # FIXME: unused
-def get_boundary_rules(tensor):
+def get_boundary_refs(tensor):
     n_br, n_vars, n_state = tensor.shape
     #n_comps = n_vars - 1 # exclude system event (last row) <- OUTDATED: system row is now excluded from input
     n_comps = n_vars
@@ -687,7 +966,7 @@ def find_first_nonempty_combination(Rcs, batch_size=65536, verbose=False):
                 mats = [r[idx_s[:, i]] for i, r in enumerate(Rcs)]
                 mat = torch.stack(mats, dim=0).prod(dim=0)  # (batch_s, n_vars, n_state)
 
-                # non-empty check (your original rule)
+                # non-empty check (your original ref)
                 is_empty = (mat == 0).all(dim=2).any(dim=1)
                 valid = ~is_empty
 
@@ -999,14 +1278,37 @@ def apply_merges(B, merges, reducer="or"):
     B_new = B[keep]
     return B_new, kept_indices
 
-def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
+def sample_new_comp_st_to_test(probs, refs_mat, B=1_024, max_iters=1_000):
+    """Search for a component-state vector not yet covered by ``refs_mat``.
+
+    Repeatedly draws batches of candidate events from the intersection
+    of the complementary events of the existing references, until a
+    boundary branch is found that is not a subset of any existing
+    reference. This is used to obtain a new sample whose system state
+    is unknown and should therefore be evaluated by the system function.
+
+    Args:
+        probs: Categorical component probabilities ``(n_var, n_state)``.
+        refs_mat: Existing reference tensor
+            ``(n_refs, n_var, n_state)``. If empty, a single all-ones
+            sample is returned.
+        B: Batch size per iteration.
+        max_iters: Maximum number of iterations before giving up.
+
+    Returns:
+        A tuple ``(new_sample, all_samples)`` where ``new_sample`` is a
+        boundary branch not covered by the existing references, and
+        ``all_samples`` is the full batch tensor accumulated during the
+        search. ``new_sample`` is ``None`` if no uncovered branch was
+        found within ``max_iters``.
+    """
 
     device = probs.device
     n_comp, n_state = probs.shape
     #n_var = n_comp + 1  # including system event <- OUTDATED: system row is now excluded from input
     n_var = n_comp
 
-    if len(rules_mat) == 0:
+    if len(refs_mat) == 0:
         all_samples = torch.ones((1, n_var, n_state), dtype=torch.int32, device=device)
         return all_samples[0], all_samples
 
@@ -1018,18 +1320,18 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
         samples_b = torch.ones((B, n_var, n_state), dtype=torch.int32, device=device)
 
         # Strategy 1: The same permutation applies within a batch
-        rules_ord = np.random.permutation(len(rules_mat))
-        # Strategy 2: Sort the rules by their probs
-        #rules_probs = get_branch_probs(rules_mat, probs)
-        #rules_ord = torch.argsort(rules_probs, descending=True)
+        refs_ord = np.random.permutation(len(refs_mat))
+        # Strategy 2: Sort the refs by their probs
+        #refs_probs = get_branch_probs(refs_mat, probs)
+        #refs_ord = torch.argsort(refs_probs, descending=True)
 
         # Sampling starts.
-        for r_idx in rules_ord:
+        for r_idx in refs_ord:
 
-            r_mat = rules_mat[r_idx]
+            r_mat = refs_mat[r_idx]
             r_mat_c = get_complementary_events_nondisjoint(r_mat)
 
-            # Decide whether to sample: skip samples that already contradicts r_mat (to obtain minimal rules)
+            # Decide whether to sample: skip samples that already contradicts r_mat (to obtain minimal refs)
             is_sampled = torch.ones((B,), dtype=torch.bool, device=device)
             for rc1 in r_mat_c:
                 flag1, flag2 = is_subset(rc1, samples_b)
@@ -1052,10 +1354,10 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
         if (real_prs > 0).any():
 
             x = torch.randint(0, 2, (1,)).item() # which strategy to select?
-            # Strategy 1: pick the rule with the highest probability
+            # Strategy 1: pick the ref with the highest probability
             if x == 0:
                 s_idx = torch.argmax(real_prs)
-            # Strategy 2: pick the lowest probability rule
+            # Strategy 2: pick the lowest probability ref
             else:
                 # Replace non-positives with +inf so they don't get picked
                 masked = torch.where(real_prs > 0, real_prs, torch.inf)  # (B,1)
@@ -1067,25 +1369,25 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
             ## decide whether to check upper or lower bound first
             x = torch.randint(0, 2, (1,)).item()
             #x = 1 # check the upper bound first
-            is_b_subset, _ = is_subset(bound_br[x], rules_mat) 
+            is_b_subset, _ = is_subset(bound_br[x], refs_mat) 
             if not is_b_subset:
                 return bound_br[x], all_samples
             else:
-                is_a_subset, _ = is_subset(bound_br[1-x], rules_mat) 
+                is_a_subset, _ = is_subset(bound_br[1-x], refs_mat) 
                 if not is_a_subset:
                     return bound_br[1-x], all_samples
                 else:
-                    Warning("Both boundary branches are subsets of the existing rules. Something's wrong.")
+                    Warning("Both boundary branches are subsets of the existing refs. Something's wrong.")
             
             # Strategy 2: pick the branch with the highest probability
             """samples_b = samples_b[real_prs > 0]
-            samples_br = get_boundary_rules(samples_b)
+            samples_br = get_boundary_refs(samples_b)
             br_prs = get_branch_probs(samples_br, probs)
             br_idx = torch.argsort(br_prs, descending=True)
             for b_idx in br_idx:
                 bound_br = samples_br[b_idx]
                 # decide whether to check upper or lower bound first
-                is_b_subset, _ = is_subset(bound_br, rules_mat) 
+                is_b_subset, _ = is_subset(bound_br, refs_mat) 
                 if not is_b_subset:
                     return bound_br, all_samples"""
 
@@ -1094,19 +1396,19 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
             return None, all_samples
 
 
-def _check_any_subset(samples_flat, not_rules_flat, sample_chunk=10000):
+def _check_any_subset(samples_flat, not_refs_flat, sample_chunk=10000):
     """
-    Check which samples are subsets of at least one rule using matmul.
+    Check which samples are subsets of at least one ref using matmul.
 
-    sample ⊆ rule iff (sample & ~rule) has no 1s, i.e. sample_flat @ not_rule_flat.T == 0.
+    sample ⊆ ref iff (sample & ~ref) has no 1s, i.e. sample_flat @ not_rule_flat.T == 0.
 
     Args:
         samples_flat: (B, D) float tensor (flattened binary samples)
-        not_rules_flat: (N_rules, D) float tensor (flattened ~rules)
+        not_refs_flat: (N_rules, D) float tensor (flattened ~refs)
         sample_chunk: process this many samples at a time to bound memory
 
     Returns:
-        (B,) bool tensor — True if sample is subset of any rule
+        (B,) bool tensor — True if sample is subset of any ref
     """
     B = samples_flat.shape[0]
     device = samples_flat.device
@@ -1115,54 +1417,54 @@ def _check_any_subset(samples_flat, not_rules_flat, sample_chunk=10000):
     for start in range(0, B, sample_chunk):
         end = min(start + sample_chunk, B)
         # (chunk, D) @ (D, N_rules) → (chunk, N_rules): count of violations
-        violations = samples_flat[start:end] @ not_rules_flat.T
+        violations = samples_flat[start:end] @ not_refs_flat.T
         result[start:end] = (violations == 0).any(dim=1)
 
     return result
 
 
-def _ensure_rules_tensor(rules, device):
-    """Convert rules to a 3D tensor if given as a list."""
-    if isinstance(rules, torch.Tensor):
-        return rules.to(device)
-    if len(rules) == 0:
+def _ensure_refs_tensor(refs, device):
+    """Convert refs to a 3D tensor if given as a list."""
+    if isinstance(refs, torch.Tensor):
+        return refs.to(device)
+    if len(refs) == 0:
         return torch.zeros((0,), device=device)
-    return torch.stack([r.to(device) for r in rules])
+    return torch.stack([r.to(device) for r in refs])
 
 
-def classify_samples(samples, upper_rules, lower_rules):
+def classify_samples(samples, upper_refs, lower_refs):
     """
     Classify samples as upper, lower, or unknown using subset checks.
 
-    Uses batched matmul instead of per-rule loop for O(1) GPU ops regardless
-    of rule count.
+    Uses batched matmul instead of per-ref loop for O(1) GPU ops regardless
+    of ref count.
 
     Args:
         samples: (n_sample, n_var, n_state) sample tensor (binary)
-        upper_rules: (n_surv, n_var, n_state) rule tensor or list
-        lower_rules: (n_fail, n_var, n_state) rule tensor or list
+        upper_refs: (n_surv, n_var, n_state) ref tensor or list
+        lower_refs: (n_fail, n_var, n_state) ref tensor or list
 
     Returns:
         counts: dict with keys 'upper', 'lower', 'unknown'
     """
     device = samples.device
     n_sample = samples.shape[0]
-    upper_rules = _ensure_rules_tensor(upper_rules, device)
-    lower_rules = _ensure_rules_tensor(lower_rules, device)
+    upper_refs = _ensure_refs_tensor(upper_refs, device)
+    lower_refs = _ensure_refs_tensor(lower_refs, device)
 
     samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
 
     # Survival check
     upper_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
-    if upper_rules.ndim == 3 and upper_rules.shape[0] > 0:
-        not_surv = (~upper_rules.bool()).reshape(upper_rules.shape[0], -1).to(dtype=torch.float16)
+    if upper_refs.ndim == 3 and upper_refs.shape[0] > 0:
+        not_surv = (~upper_refs.bool()).reshape(upper_refs.shape[0], -1).to(dtype=torch.float16)
         upper_mask = _check_any_subset(samples_flat, not_surv)
 
     # Lower check (only on non-upper samples)
     lower_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
     remaining = ~upper_mask
-    if lower_rules.ndim == 3 and lower_rules.shape[0] > 0 and remaining.any():
-        not_fail = (~lower_rules.bool()).reshape(lower_rules.shape[0], -1).to(dtype=torch.float16)
+    if lower_refs.ndim == 3 and lower_refs.shape[0] > 0 and remaining.any():
+        not_fail = (~lower_refs.bool()).reshape(lower_refs.shape[0], -1).to(dtype=torch.float16)
         fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
         lower_mask[remaining] = fail_sub
 
@@ -1178,12 +1480,12 @@ def _sample_and_classify_on_device(args):
     Sample + classify on a single GPU device. Used by multi-GPU sampling.
     Runs in a thread — GPU ops release the GIL during kernel execution.
     """
-    probs_dev, n_sample, rules_upper_dev, rules_lower_dev, with_indices = args
+    probs_dev, n_sample, refs_upper_dev, refs_lower_dev, with_indices = args
     samples = sample_categorical(probs_dev, n_sample)
     if with_indices:
-        res = classify_samples_with_indices(samples, rules_upper_dev, rules_lower_dev, return_masks=True)
+        res = classify_samples_with_indices(samples, refs_upper_dev, refs_lower_dev, return_masks=True)
     else:
-        res = classify_samples(samples, rules_upper_dev, rules_lower_dev)
+        res = classify_samples(samples, refs_upper_dev, refs_lower_dev)
     return samples, res
 
 
@@ -1269,68 +1571,89 @@ def mask_from_first_one(
 
     return mask.squeeze(0) if squeeze_back else mask
 
-def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
-    _, _, n_state = rules_mat.shape
-    Rnew = from_rule_dict_to_mat(min_comps_st, row_names, n_state, device=rules_mat.device)
-    is_Rnew_subset, are_Rset_subset = is_subset(Rnew, rules_mat)
+def update_refs(min_comps_st, refs_dict, refs_mat, row_names, verbose=False):
+    """Insert a new reference into the store, removing any it dominates.
+
+    Converts ``min_comps_st`` to a reference matrix, checks whether it
+    is already a subset of any existing reference (in which case nothing
+    is updated), and otherwise removes existing references that are
+    subsets of the new one before appending it.
+
+    Args:
+        min_comps_st: Minimised component-state dictionary representing
+            the new reference.
+        refs_dict: Current list of reference dictionaries.
+        refs_mat: Current reference tensor of shape
+            ``(n_refs, n_var, n_state)``.
+        row_names: Component names matching the rows of ``refs_mat``.
+        verbose: If True, print a note when the new reference is
+            dominated or when existing references are removed.
+
+    Returns:
+        A tuple ``(refs_dict, refs_mat)`` updated in place-equivalent
+        form.
+    """
+    _, _, n_state = refs_mat.shape
+    Rnew = from_ref_dict_to_mat(min_comps_st, row_names, n_state)
+    is_Rnew_subset, are_Rset_subset = is_subset(Rnew, refs_mat)
 
     if is_Rnew_subset:
         if verbose:
-            print("WARNING: New rule is a subset of existing rules. No update made.")
-        return rules_dict, rules_mat
+            print("WARNING: New ref is a subset of existing refs. No update made.")
+        return refs_dict, refs_mat
 
-    rules_mat = rules_mat[~are_Rset_subset,:,:]
-    rules_dict = [r for r, keep in zip(rules_dict, ~are_Rset_subset) if keep]
+    refs_mat = refs_mat[~are_Rset_subset,:,:]
+    refs_dict = [r for r, keep in zip(refs_dict, ~are_Rset_subset) if keep]
 
-    rules_dict.append(min_comps_st)
-    rules_mat = torch.cat((rules_mat, Rnew.unsqueeze(0)), dim=0)
+    refs_dict.append(min_comps_st)
+    refs_mat = torch.cat((refs_mat, Rnew.unsqueeze(0)), dim=0)
     if verbose:
-        print("No. of existing rules removed: ", int(sum(are_Rset_subset)))
+        print("No. of existing refs removed: ", int(sum(are_Rset_subset)))
 
-    return rules_dict, rules_mat
+    return refs_dict, refs_mat
 
 
-def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbose=False):
+def update_refs_batch(new_refs_dicts, refs_dict, refs_mat, row_names, verbose=False):
     """
-    Batch version of update_rules: process multiple new rules at once.
+    Batch version of update_refs: process multiple new refs at once.
 
-    Instead of calling is_subset N times (each against a growing rules_mat),
+    Instead of calling is_subset N times (each against a growing refs_mat),
     this does:
-      1. Convert all new rules to matrices in one pass
+      1. Convert all new refs to matrices in one pass
       2. One batched dominance check: new vs existing
       3. One batched dominance check: new vs new (inter-batch)
-      4. Filter and append all upper rules at once
+      4. Filter and append all upper refs at once
 
     Returns:
-        (rules_dict, rules_mat, n_added, n_removed)
+        (refs_dict, refs_mat, n_added, n_removed)
     """
-    if not new_rules_dicts:
-        return rules_dict, rules_mat, 0, 0
+    if not new_refs_dicts:
+        return refs_dict, refs_mat, 0, 0
 
-    n_existing, n_var, n_state = rules_mat.shape
-    device = rules_mat.device
+    n_existing, n_var, n_state = refs_mat.shape
+    device = refs_mat.device
 
-    # Step 1: convert all new rules to matrices
+    # Step 1: convert all new refs to matrices
     new_mats = []
-    for rd in new_rules_dicts:
-        new_mats.append(from_rule_dict_to_mat(rd, row_names, n_state, device=device))
+    for rd in new_refs_dicts:
+        new_mats.append(from_ref_dict_to_mat(rd, row_names, n_state))
     new_batch = torch.stack(new_mats, dim=0)  # (N_new, n_var, n_state)
     n_new = new_batch.shape[0]
 
     # Step 2: check new vs existing
-    # For each new rule, is it dominated by any existing rule?
-    # For each existing rule, is it dominated by any new rule?
-    # new_batch: (N_new, n_var, n_state), rules_mat: (N_ex, n_var, n_state)
+    # For each new ref, is it dominated by any existing ref?
+    # For each existing ref, is it dominated by any new ref?
+    # new_batch: (N_new, n_var, n_state), refs_mat: (N_ex, n_var, n_state)
     new_dominated = torch.zeros(n_new, dtype=torch.bool, device=device)
     existing_dominated = torch.zeros(n_existing, dtype=torch.bool, device=device)
 
     if n_existing > 0 and n_new > 0:
-        # Chunk over existing rules to bound memory: (N_new, chunk, n_var, n_state)
+        # Chunk over existing refs to bound memory: (N_new, chunk, n_var, n_state)
         # With N_new=96, chunk=8000, n_var=120, n_state=2: ~180MB per chunk
         chunk_size = max(1, 500_000_000 // (n_new * n_var * n_state * 4))  # ~500MB limit
         for c_start in range(0, n_existing, chunk_size):
             c_end = min(c_start + chunk_size, n_existing)
-            ex_chunk = rules_mat[c_start:c_end]  # (chunk, n_var, n_state)
+            ex_chunk = refs_mat[c_start:c_end]  # (chunk, n_var, n_state)
             new_exp = new_batch.unsqueeze(1)      # (N_new, 1, n_var, n_state)
             ex_exp = ex_chunk.unsqueeze(0)        # (1, chunk, n_var, n_state)
             intersect = new_exp & ex_exp          # (N_new, chunk, n_var, n_state)
@@ -1343,7 +1666,7 @@ def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbos
             ex_eq = (ex_exp == intersect).all(dim=(2, 3))    # (N_new, chunk)
             existing_dominated[c_start:c_end] |= ex_eq.any(dim=0)
 
-    # Step 3: among upper new rules, check inter-dominance
+    # Step 3: among upper new refs, check inter-dominance
     upper_new_idx = torch.where(~new_dominated)[0]
     if len(upper_new_idx) > 1:
         upper_batch = new_batch[upper_new_idx]  # (M, n_var, n_state)
@@ -1359,10 +1682,10 @@ def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbos
         j_sub_i.fill_diagonal_(False)
         # Strict dominance: j dominates i (i⊂j but j⊄i)
         strict = i_sub_j & ~j_sub_i
-        # Equal rules (i⊂j AND j⊂i): tiebreak by index — only j<i can dominate i
+        # Equal refs (i⊂j AND j⊂i): tiebreak by index — only j<i can dominate i
         equal = i_sub_j & j_sub_i
         lower_mask = torch.tril(torch.ones(M, M, dtype=torch.bool, device=device), diagonal=-1)
-        # Rule i is dominated if strictly dominated by any j, or equal to some j<i
+        # Ref i is dominated if strictly dominated by any j, or equal to some j<i
         inter_dominated = strict.any(dim=1) | (equal & lower_mask).any(dim=1)  # (M,)
         # Map back: mark dominated ones
         dominated_in_upper = upper_new_idx[inter_dominated]
@@ -1375,272 +1698,21 @@ def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbos
     n_removed = int(existing_dominated.sum().item())
     n_added = int(keep_new.sum().item())
 
-    rules_mat = torch.cat([
-        rules_mat[keep_existing],
+    refs_mat = torch.cat([
+        refs_mat[keep_existing],
         new_batch[keep_new],
     ], dim=0)
 
-    rules_dict = [r for r, k in zip(rules_dict, keep_existing.tolist()) if k]
-    for i, rd in enumerate(new_rules_dicts):
+    refs_dict = [r for r, k in zip(refs_dict, keep_existing.tolist()) if k]
+    for i, rd in enumerate(new_refs_dicts):
         if keep_new[i]:
-            rules_dict.append(rd)
+            refs_dict.append(rd)
 
     if verbose:
-        print(f"Batch update: {n_added} rules added, {n_removed} existing rules removed "
-              f"({n_new - n_added} new rules dominated)")
+        print(f"Batch update: {n_added} refs added, {n_removed} existing refs removed "
+              f"({n_new - n_added} new refs dominated)")
 
-    return rules_dict, rules_mat, n_added, n_removed
-
-def run_rule_extraction(
-    *,
-    # Problem-specific callables / data
-    sfun: Callable[[Dict[str, int]], Tuple[Any, Any, Any]],
-    probs: Tensor,
-    row_names: List[str],
-    n_state: int,
-    rules_upper: List[Dict[str, Any]] = [],
-    rules_lower: List[Dict[str, Any]] = [],
-    rules_mat_upper: Tensor = None,
-    rules_mat_lower: Tensor = None,
-    # Analysis parameters
-    stochastic_search: bool = True,
-    gamma: float = 0.5, # if stochastic_search==False, ignored. 0 < γ < 1 → more emphasis on exploration; γ > 1 → more emphasis on exploitation
-    # Termination / threshold settings
-    unk_prob_thres: float = 5e-2,
-    # Frequencies / sampling settings
-    prob_update_every: int = 50,   # (2) how often to test system probabilities/bounds
-    save_every: int = 10,          # (4) how often to persist logs/rules
-    n_sample: int = 1_000_000,
-    sample_batch_size: int = 1_000_000,
-    rule_search_batch_size: int = 1_024,    # sampler batch for candidate rule search
-    rule_search_max_iters: int = 10,
-    min_rule_search: bool = True, # May be opted out for expensive sfun
-    # Display / verbose
-    rule_update_verbose: bool = True,
-    # Output control
-    output_dir: str = "rsr_temp",
-    upper_json_name: str = "rules_upper.json",
-    lower_json_name: str = "rules_lower.json",
-    upper_pt_name: str = "rules_upper.pt",
-    lower_pt_name: str = "rules_lower.pt",
-    metrics_path: str = "metrics.jsonl",
-) -> Dict[str, Any]:
-    """
-    Runs the upper/lower reference state discovery loop (steps 3 & 4 only),
-    periodically evaluates unknown probability via sampling, and logs metrics.
-
-    Returns a dict with updated rules, rule matrices, threshold lists, and the in-memory metrics log.
-    """
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    # ---- helpers ----
-    def _avg_rule_len(rule_store: Any) -> float:
-        """
-        Try to estimate average number of conditions in current rules.
-        Length of rule dictionary minus system event: len(rule) - 1
-        Works for list-of-dictionaries; returns 0.0 if unavailable.
-        """
-        try:
-            if rule_store is None:
-                return 0.0
-            # If it's a list-like of rules:
-            if hasattr(rule_store, "__len__") and len(rule_store) > 0:
-                total = sum([len(r) - 1 for r in rule_store])
-                count = len(rule_store)
-                return float(total) / count
-        except Exception:
-            pass
-        return 0.0
-
-    def _save_json(obj, path):
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(obj, f, indent=4)
-
-    def _save_pt(t: torch.Tensor, path: str) -> None:
-        torch.save(t.detach().cpu(), path)
-
-    # ---- initial state ----
-    device = probs.device
-    n_sample_loop = max(int(n_sample // sample_batch_size), 1)
-
-    unk_prob = 1.0
-    n_round = 0
-    metrics_log: List[Dict[str, Any]] = []
-
-    n_vars = len(row_names)
-    if rules_mat_upper is None:
-        rules_mat_upper = torch.empty((0,n_vars,n_state), dtype=torch.int32, device=device)
-    if rules_mat_lower is None:
-        rules_mat_lower = torch.empty((0,n_vars,n_state), dtype=torch.int32, device=device)
-
-    # Threshold discovery bookkeeping
-    sys_val_list = []
-
-    # JSONL file for metrics (append-only)
-    metrics_path = os.path.join(output_dir, metrics_path)
-    # snapshot rules paths
-    rules_upper_path = os.path.join(output_dir, upper_json_name)
-    rules_lower_path = os.path.join(output_dir, lower_json_name)
-    rules_upper_pt_path = os.path.join(output_dir, upper_pt_name)
-    rules_lower_pt_path = os.path.join(output_dir, lower_pt_name)
-
-    # while flags: use only steps 3 & 4 flags
-    is_new_surv_cand, is_new_fail_cand = True, True
-
-    # last known probabilities (only updated when recomputed)
-    last_probs = {"upper": None, "lower": None, "unknown": None}
-    
-
-    # ---- main loop ----
-    while (is_new_surv_cand or is_new_fail_cand) and (unk_prob > unk_prob_thres):
-        n_round += 1
-        t0 = time.perf_counter()
-
-        print("---")
-        print(f"Round: {n_round}, Unk. prob.: {unk_prob:.3e}")
-        print(f"No. of non-dominant rules: {len(rules_mat_upper)+len(rules_mat_lower)}, "
-              f"Survival rules: {len(rules_mat_upper)}, Failure rules: {len(rules_mat_lower)}")
-
-        # ---- 3) Get a upper candidate from upper rules ----
-        is_new_surv_cand, rules_upper, rules_lower, rules_mat_upper, rules_mat_lower, sys_val_list = \
-            run_upper_candidate_round(
-                probs=probs,
-                rules_mat_upper=rules_mat_upper,
-                rules_mat_lower=rules_mat_lower,
-                rules_upper=rules_upper,
-                rules_lower=rules_lower,
-                row_names=row_names,
-                n_state=n_state,
-                sys_val_list=sys_val_list,
-                sfun=sfun,
-                rule_search_batch_size=rule_search_batch_size,
-                rule_search_max_iters=rule_search_max_iters,
-                stochastic_search=stochastic_search,
-                gamma=gamma,
-                min_rule_search=min_rule_search,
-                rule_update_verbose=rule_update_verbose,
-            )
-
-        # ---- 4) Get a lower candidate from lower rules ----
-        is_new_fail_cand, rules_upper, rules_lower, rules_mat_upper, rules_mat_lower, sys_val_list = \
-            run_lower_candidate_round(
-                probs=probs,
-                rules_mat_upper=rules_mat_upper,
-                rules_mat_lower=rules_mat_lower,
-                rules_upper=rules_upper,
-                rules_lower=rules_lower,
-                row_names=row_names,
-                n_state=n_state,
-                sys_val_list=sys_val_list,
-                sfun=sfun,
-                rule_search_batch_size=rule_search_batch_size,
-                rule_search_max_iters=rule_search_max_iters,
-                stochastic_search=stochastic_search,
-                gamma=gamma,
-                min_rule_search=min_rule_search,
-                rule_update_verbose=rule_update_verbose,
-            )
-
-        # ---- Periodic probability (bound) test via sampling ----
-        probs_updated = False
-        if (n_round % prob_update_every) == 0:
-            total_loops = max(n_sample // sample_batch_size, 1)
-            counts = {"upper": 0, "lower": 0, "unknown": 0}
-            for i in range(total_loops):
-                samples = sample_categorical(probs, sample_batch_size)
-                counts_i = classify_samples(samples, rules_mat_upper, rules_mat_lower)
-                counts["upper"] += counts_i["upper"]
-                counts["lower"] += counts_i["lower"]
-                counts["unknown"] += counts_i["unknown"]
-
-            samp_probs = {k: v / (sample_batch_size * total_loops) for k, v in counts.items()}
-            print("---")
-            print(f"Probs: 'upper': {samp_probs['upper']: .3e}, 'lower': {samp_probs['lower']: .3e}, 'unkn': {samp_probs['unknown']: .3e}")
-            unk_prob = samp_probs["unknown"]
-            last_probs.update(samp_probs)
-            probs_updated = True
-
-        # ---- metrics for this round ----
-        dt = time.perf_counter() - t0
-        entry = {
-            "round": n_round,
-            "time_sec": dt,
-            "n_rules_upper": int(len(rules_mat_upper)),
-            "n_rules_lower": int(len(rules_mat_lower)),
-            "probs_updated": probs_updated,
-            "p_upper": last_probs["upper"] if probs_updated else None,
-            "p_lower": last_probs["lower"] if probs_updated else None,
-            "p_unknown": last_probs["unknown"] if probs_updated else None,
-            "avg_len_upper": _avg_rule_len(rules_upper),
-            "avg_len_lower": _avg_rule_len(rules_lower),
-        }
-        metrics_log.append(entry)
-
-        # ---- periodic persistence of metrics and rules ----
-        if (n_round % save_every) == 0:
-            # append metrics as JSONL
-            with open(metrics_path, "a", encoding="utf-8") as mf:
-                for e in metrics_log[-save_every:]:
-                    mf.write(json.dumps(e) + "\n")
-            # snapshot rules
-            _save_json(rules_upper, rules_upper_path)
-            _save_json(rules_lower, rules_lower_path)
-            _save_pt(rules_mat_upper, rules_upper_pt_path)
-            _save_pt(rules_mat_lower, rules_lower_pt_path)
-
-    # Final flush of any remaining metrics not yet written by save_every
-    last_flushed_rounds = (n_round // save_every) * save_every
-    if last_flushed_rounds < n_round and metrics_log:
-        with open(metrics_path, "a", encoding="utf-8") as mf:
-            for e in metrics_log[last_flushed_rounds:]:
-                mf.write(json.dumps(e) + "\n")
-    # Final snapshot of rules
-    _save_json(rules_upper, rules_upper_path)
-    _save_json(rules_lower, rules_lower_path)
-    _save_pt(rules_mat_upper, rules_upper_pt_path)
-    _save_pt(rules_mat_lower, rules_lower_pt_path)
-    # Final probability check
-    total_loops = max(n_sample // sample_batch_size, 1)
-    counts = {"upper": 0, "lower": 0, "unknown": 0}
-    for i in range(total_loops):
-        samples = sample_categorical(probs, sample_batch_size)
-        counts_i = classify_samples(samples, rules_mat_upper, rules_mat_lower)
-        counts["upper"] += counts_i["upper"]
-        counts["lower"] += counts_i["lower"]
-        counts["unknown"] += counts_i["unknown"]
-
-    samp_probs = {k: v / (sample_batch_size * total_loops) for k, v in counts.items()}
-    print("---")
-    print(f"[Final results] Probs: 'upper': {samp_probs['upper']: .3e}, 'lower': {samp_probs['lower']: .3e}, 'unkn': {samp_probs['unknown']: .3e}")
-    unk_prob = samp_probs["unknown"]
-    last_probs.update(samp_probs)
-    probs_updated = True
-    # ---
-    dt = time.perf_counter() - t0
-    entry = {
-        "round": n_round,
-        "time_sec": dt,
-        "n_rules_upper": int(len(rules_mat_upper)),
-        "n_rules_lower": int(len(rules_mat_lower)),
-        "probs_updated": probs_updated,
-        "p_upper": last_probs["upper"] if probs_updated else None,
-        "p_lower": last_probs["lower"] if probs_updated else None,
-        "p_unknown": last_probs["unknown"] if probs_updated else None,
-        "avg_len_upper": _avg_rule_len(rules_upper),
-        "avg_len_lower": _avg_rule_len(rules_lower),
-    }
-    metrics_log.append(entry)
-
-    return {
-        "sys_vals": sys_val_list,
-        "metrics_path": metrics_path,
-        "rules_upper_path": rules_upper_path,
-        "rules_lower_path": rules_lower_path,
-        "rules_upper_pt_path": rules_upper_pt_path,   
-        "rules_lower_pt_path": rules_lower_pt_path,
-        "metrics_log": metrics_log,  # also returned in-memory
-    }
+    return refs_dict, refs_mat, n_added, n_removed
 
 def mixed_sort_key(x):
     if x is None:
@@ -1659,8 +1731,8 @@ def mixed_sort_key(x):
 
 def classify_samples_with_indices(
     samples: torch.Tensor,
-    upper_rules: List[torch.Tensor],
-    lower_rules: List[torch.Tensor],
+    upper_refs: List[torch.Tensor],
+    lower_refs: List[torch.Tensor],
     *,
     return_masks: bool = False
 ) -> Dict[str, Any]:
@@ -1670,44 +1742,46 @@ def classify_samples_with_indices(
 
     Args:
         samples: (n_sample, n_var, n_state) binary tensor
-        upper_rules: list of rule tensors, each (n_var, n_state) or (n_var+1, n_state)
-        lower_rules: list of rule tensors, each (n_var, n_state) or (n_var+1, n_state)
+        upper_refs: list of ref tensors, each (n_var, n_state) or (n_var+1, n_state)
+        lower_refs: list of ref tensors, each (n_var, n_state) or (n_var+1, n_state)
         return_masks: if True, also return boolean masks per class
 
     Returns:
-        {
-          'upper': int,
-          'lower' : int,
-          'unknown' : int,
-          'idx_upper': LongTensor[ns],
-          'idx_lower' : LongTensor[nf],
-          'idx_unknown' : LongTensor[nu],
-          # optionally:
-          'mask_upper': BoolTensor[n_sample],
-          'mask_lower' : BoolTensor[n_sample],
-          'mask_unknown' : BoolTensor[n_sample],
-        }
+        A dictionary of the form::
+
+            {
+              'upper': int,
+              'lower': int,
+              'unknown': int,
+              'idx_upper': LongTensor[ns],
+              'idx_lower': LongTensor[nf],
+              'idx_unknown': LongTensor[nu],
+              # optionally (if return_masks=True):
+              'mask_upper': BoolTensor[n_sample],
+              'mask_lower': BoolTensor[n_sample],
+              'mask_unknown': BoolTensor[n_sample],
+            }
     """
     device = samples.device
     n_sample = samples.shape[0]
-    upper_rules = _ensure_rules_tensor(upper_rules, device)
-    lower_rules = _ensure_rules_tensor(lower_rules, device)
+    upper_refs = _ensure_refs_tensor(upper_refs, device)
+    lower_refs = _ensure_refs_tensor(lower_refs, device)
 
     samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
 
     # Survival check
     upper_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
-    if upper_rules.ndim == 3 and upper_rules.shape[0] > 0:
-        not_surv = (~upper_rules.bool()).reshape(
-            upper_rules.shape[0], -1).to(dtype=torch.float16)
+    if upper_refs.ndim == 3 and upper_refs.shape[0] > 0:
+        not_surv = (~upper_refs.bool()).reshape(
+            upper_refs.shape[0], -1).to(dtype=torch.float16)
         upper_mask = _check_any_subset(samples_flat, not_surv)
 
     # Lower check (only on non-upper samples)
     lower_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
     remaining = ~upper_mask
-    if lower_rules.ndim == 3 and lower_rules.shape[0] > 0 and remaining.any():
-        not_fail = (~lower_rules.bool()).reshape(
-            lower_rules.shape[0], -1).to(dtype=torch.float16)
+    if lower_refs.ndim == 3 and lower_refs.shape[0] > 0 and remaining.any():
+        not_fail = (~lower_refs.bool()).reshape(
+            lower_refs.shape[0], -1).to(dtype=torch.float16)
         fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
         lower_mask[remaining] = fail_sub
 
@@ -1735,8 +1809,8 @@ def classify_samples_with_indices(
     return result
 
 def get_comp_cond_sys_prob(
-    rules_mat_upper: Tensor,
-    rules_mat_lower: Tensor,
+    refs_mat_upper: Tensor,
+    refs_mat_lower: Tensor,
     probs: Tensor,
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
@@ -1749,7 +1823,7 @@ def get_comp_cond_sys_prob(
     P(system state | given component states).
 
     - 'probs' is (n_var, n_state) categorical; we condition rows listed in comps_st_cond to one-hot.
-    - We classify samples using rules; for unknowns we call s_fun(comps_dict) to resolve.
+    - We classify samples using refs; for unknowns we call s_fun(comps_dict) to resolve.
     - Returns probabilities over {'upper','lower'} that sum ~ 1.0.
 
     """
@@ -1785,7 +1859,7 @@ def get_comp_cond_sys_prob(
         samples = sample_categorical(probs_cond, b)  # (b, n_var, n_state) one-hot
 
         res = classify_samples_with_indices(
-            samples, rules_mat_upper, rules_mat_lower, return_masks=True
+            samples, refs_mat_upper, refs_mat_lower, return_masks=True
         )
 
         counts["upper"] += int(res["upper"])
@@ -1821,8 +1895,8 @@ def get_comp_cond_sys_prob(
     return cond_probs
 
 def get_comp_cond_sys_prob_multi(
-    rules_dict_upper: Dict[int, Tensor],
-    rules_dict_lower: Dict[int, Tensor],
+    refs_dict_upper: Dict[int, Tensor],
+    refs_dict_lower: Dict[int, Tensor],
     probs: Tensor,
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
@@ -1834,8 +1908,8 @@ def get_comp_cond_sys_prob_multi(
     Estimate P(system state = s | given component states) for multi-state systems by Monte Carlo.
 
     Args:
-        rules_dict_upper: dict of system upper reference state tensors {state: Tensor(n_var, n_state)}.
-        rules_dict_lower: dict of system lower reference state tensors {state: Tensor(n_var, n_state)}.
+        refs_dict_upper: dict of system upper reference state tensors {state: Tensor(n_var, n_state)}.
+        refs_dict_lower: dict of system lower reference state tensors {state: Tensor(n_var, n_state)}.
         probs: (n_var, n_state) categorical probability tensor.
         comps_st_cond: dict of known component states {name: state_index}.
         row_names: list of variable (component) names matching probs rows.
@@ -1866,15 +1940,15 @@ def get_comp_cond_sys_prob_multi(
         probs_cond[row_idx].zero_()
         probs_cond[row_idx, int(s)] = 1.0
 
-    # Validate rule keys
-    keys_surv = set(rules_dict_upper.keys())
-    keys_fail = set(rules_dict_lower.keys())
+    # Validate ref keys
+    keys_surv = set(refs_dict_upper.keys())
+    keys_fail = set(refs_dict_lower.keys())
     if keys_surv != keys_fail:
-        raise ValueError("Upper and lower rule dictionaries must have identical keys.")
+        raise ValueError("Upper and lower ref dictionaries must have identical keys.")
     sys_st_list = sorted(keys_surv)
     max_st = max(sys_st_list)
     if sys_st_list != list(range(1, max_st + 1)):
-        raise ValueError("Rule dictionary keys must be consecutive integers starting at 1.")
+        raise ValueError("Ref dictionary keys must be consecutive integers starting at 1.")
 
     # --- sampling loop (exactly n_sample draws) ---
     batch_size = max(1, min(int(n_batch), int(n_sample)))
@@ -1891,7 +1965,7 @@ def get_comp_cond_sys_prob_multi(
         for s in range(1, max_st + 1):
 
             _res = classify_samples_with_indices(
-                samples[active], rules_dict_upper[s], rules_dict_lower[s], return_masks=True
+                samples[active], refs_dict_upper[s], refs_dict_lower[s], return_masks=True
             )
 
             # back to original indices
@@ -1943,17 +2017,17 @@ def get_comp_cond_sys_prob_multi(
     cond_probs = {k: counts[k] / total for k in counts}
     return cond_probs
 
-def run_rule_extraction_by_mcs(
+def run_ref_extraction_by_mcs(
     *,
     sfun,
     probs: torch.Tensor,
     row_names: List[str],
     n_state: int,
     sys_upper_st: int,
-    rules_upper: Optional[List[Dict[str, Any]]] = None,
-    rules_lower: Optional[List[Dict[str, Any]]] = None,
-    rules_mat_upper: Optional[torch.Tensor] = None,
-    rules_mat_lower: Optional[torch.Tensor] = None,
+    refs_upper: Optional[List[Dict[str, Any]]] = None,
+    refs_lower: Optional[List[Dict[str, Any]]] = None,
+    refs_mat_upper: Optional[torch.Tensor] = None,
+    refs_mat_lower: Optional[torch.Tensor] = None,
     # Termination / threshold settings
     unk_prob_thres: float = 1e-2,
     unk_prob_opt: str = "rel", # "abs" or "rel"
@@ -1964,8 +2038,8 @@ def run_rule_extraction_by_mcs(
     n_sample: int = 10_000_000,
     sample_batch_size: int = 100_000,
     max_search_loops: int = 0,  # max batches per round for searching unknowns (0 = use n_sample // sample_batch_size)
-    min_rule_search: bool = True,
-    rule_update_verbose: bool = True,
+    min_ref_search: bool = True,
+    ref_update_verbose: bool = True,
     # Parallelism
     n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
     devices: Optional[List[str]] = None,  # list of GPU devices for multi-GPU sampling, e.g. ["cuda:0", "cuda:1"]
@@ -1977,24 +2051,85 @@ def run_rule_extraction_by_mcs(
     lower_pt_name: str = None,
     metrics_path: str = "metrics.json",
 ) -> Dict[str, Any]:
+    """Extract boundary reference states via Monte Carlo search.
+
+    Iterates between exploring the unknown system-event space by Monte
+    Carlo simulation and evaluating the system function on candidate
+    component states. On each round, samples are drawn from ``probs``,
+    classified as upper, lower, or unknown against the current reference
+    stores, and unknown samples are resolved by calling ``sfun``. The
+    resulting upper/lower references are minimised and merged back in.
+    The loop terminates when the probability of the unknown region falls
+    below ``unk_prob_thres`` or ``max_rounds`` is reached.
+
+    Args:
+        sfun: System function. Callable ``comps_dict -> (fval, sys_state, info)``.
+        probs: Categorical component probabilities of shape
+            ``(n_var, n_state)``.
+        row_names: Component names matching the rows of ``probs``.
+        n_state: Number of states per component.
+        sys_upper_st: System-state threshold that defines the upper
+            reference set (samples with ``sys_state >= sys_upper_st``).
+        refs_upper: Optional initial list of upper reference dicts.
+        refs_lower: Optional initial list of lower reference dicts.
+        refs_mat_upper: Optional initial upper reference tensor
+            ``(n_refs, n_var, n_state)``.
+        refs_mat_lower: Optional initial lower reference tensor.
+
+    Keyword Args:
+        unk_prob_thres: Termination threshold on the unknown-region
+            probability.
+        unk_prob_opt: Threshold interpretation — ``"abs"`` (absolute) or
+            ``"rel"`` (relative to the previous round).
+        max_rounds: Hard cap on the number of rounds.
+        prob_update_every: Frequency (in rounds) at which the unknown
+            probability is re-estimated.
+        save_every: Frequency (in rounds) at which references and
+            metrics are written to disk.
+        n_sample: Total number of samples drawn per probability update.
+        sample_batch_size: Samples per batch inside one update.
+        max_search_loops: Max batches per round used to search for new
+            unknown candidates. ``0`` means ``n_sample // sample_batch_size``.
+        min_ref_search: Whether to minimise newly found references
+            before inserting them.
+        ref_update_verbose: Print progress messages during reference
+            updates.
+        n_workers: Number of CPU worker processes for parallel
+            ``sfun`` evaluation and state minimisation.
+        devices: GPU devices for multi-GPU sampling, e.g.
+            ``["cuda:0", "cuda:1"]``.
+        output_dir: Directory in which references and metrics are
+            written.
+        upper_json_name: Filename for upper references (JSON).
+            Defaults to ``refs_up_{sys_upper_st}.json``.
+        lower_json_name: Filename for lower references (JSON).
+            Defaults to ``refs_low_{sys_upper_st-1}.json``.
+        upper_pt_name: Filename for the upper reference tensor (PyTorch).
+        lower_pt_name: Filename for the lower reference tensor (PyTorch).
+        metrics_path: Filename for the per-round metrics log.
+
+    Returns:
+        A dictionary with the final ``refs_upper``, ``refs_lower``,
+        ``refs_mat_upper``, ``refs_mat_lower``, and the metrics log.
+    """
 
     os.makedirs(output_dir, exist_ok=True)
 
     if upper_json_name is None:
-        upper_json_name = f"rules_geq_{sys_upper_st}.json"
+        upper_json_name = f"refs_up_{sys_upper_st}.json"
     if lower_json_name is None:
-        lower_json_name = f"rules_leq_{sys_upper_st-1}.json"
+        lower_json_name = f"refs_low_{sys_upper_st-1}.json"
     if upper_pt_name is None:
-        upper_pt_name = f"rules_geq_{sys_upper_st}.pt"
+        upper_pt_name = f"refs_up_{sys_upper_st}.pt"
     if lower_pt_name is None:
-        lower_pt_name = f"rules_leq_{sys_upper_st-1}.pt"
+        lower_pt_name = f"refs_low_{sys_upper_st-1}.pt"
 
     # ---- helpers ----
-    def _avg_rule_len(rule_store: Any) -> float:
+    def _avg_rule_len(ref_store: Any) -> float:
         try:
-            if not rule_store:
+            if not ref_store:
                 return 0.0
-            return (sum(len(r) - 1 for r in rule_store)) / len(rule_store)
+            return (sum(len(r) - 1 for r in ref_store)) / len(ref_store)
         except Exception:
             return 0.0
 
@@ -2006,8 +2141,8 @@ def run_rule_extraction_by_mcs(
         torch.save(t.detach().cpu(), path)
 
     # ---- initial state ----
-    if rules_upper is None: rules_upper = []
-    if rules_lower is None: rules_lower = []
+    if refs_upper is None: refs_upper = []
+    if refs_lower is None: refs_lower = []
 
     device = probs.device
 
@@ -2016,18 +2151,18 @@ def run_rule_extraction_by_mcs(
     metrics_log: List[Dict[str, Any]] = []
 
     n_vars = len(row_names)
-    if rules_mat_upper is None:
-        rules_mat_upper = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
-    if rules_mat_lower is None:
-        rules_mat_lower = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+    if refs_mat_upper is None:
+        refs_mat_upper = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+    if refs_mat_lower is None:
+        refs_mat_lower = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
 
     sys_val_list: List[Any] = []
 
     metrics_path = os.path.join(output_dir, metrics_path)
-    rules_upper_path = os.path.join(output_dir, upper_json_name)
-    rules_lower_path = os.path.join(output_dir, lower_json_name)
-    rules_upper_pt_path = os.path.join(output_dir, upper_pt_name)
-    rules_lower_pt_path = os.path.join(output_dir, lower_pt_name)
+    refs_upper_path = os.path.join(output_dir, upper_json_name)
+    refs_lower_path = os.path.join(output_dir, lower_json_name)
+    refs_upper_pt_path = os.path.join(output_dir, upper_pt_name)
+    refs_lower_pt_path = os.path.join(output_dir, lower_pt_name)
 
     is_new_cand = True
     last_probs = {"upper": 0.0, "lower": 0.0, "unknown": 1.0}
@@ -2069,8 +2204,8 @@ def run_rule_extraction_by_mcs(
         print(f"Round: {n_round}, Unk. prob.: {unk_prob:.3e}")
         if last_probs['upper'] is not None and last_probs['lower'] is not None:
             print(f"Upper probs: {last_probs['upper']:.3e}, Lower probs: {last_probs['lower']:.3e}")
-        print(f"No. of non-dominant rules: {len(rules_mat_upper)+len(rules_mat_lower)}, "
-              f"Survival rules: {len(rules_mat_upper)}, Failure rules: {len(rules_mat_lower)}")
+        print(f"No. of non-dominant refs: {len(refs_mat_upper)+len(refs_mat_lower)}, "
+              f"Survival refs: {len(refs_mat_upper)}, Failure refs: {len(refs_mat_lower)}")
 
         is_new_cand = False
         counts = {"upper": 0, "lower": 0, "unknown": 0}
@@ -2079,8 +2214,11 @@ def run_rule_extraction_by_mcs(
         i = -1
         _t_search = 0.0
         _t_minimize = 0.0
-        _t_rules = 0.0
+        _t_refs = 0.0
         _t_probs = 0.0
+        # sfun calls consumed this round to find upper / lower minimal refs
+        n_sfun_upper = 0
+        n_sfun_lower = 0
 
         _ts = time.perf_counter()
         for i in range(search_loops):
@@ -2092,9 +2230,9 @@ def run_rule_extraction_by_mcs(
                 tasks = []
                 for gi in range(n_gpus):
                     n_gi = per_gpu + (1 if gi < remainder else 0)
-                    rules_s_gi = rules_mat_upper.to(_gpu_devices[gi])
-                    rules_f_gi = rules_mat_lower.to(_gpu_devices[gi])
-                    tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, True))
+                    refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
+                    refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
+                    tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, True))
 
                 futures = list(_gpu_thread_pool.map(_sample_and_classify_on_device, tasks))
 
@@ -2108,10 +2246,10 @@ def run_rule_extraction_by_mcs(
                 samples = torch.cat(all_samples, dim=0)
 
                 # Re-classify merged batch on primary device for correct indices
-                res = classify_samples_with_indices(samples, rules_mat_upper, rules_mat_lower, return_masks=True)
+                res = classify_samples_with_indices(samples, refs_mat_upper, refs_mat_lower, return_masks=True)
             else:
                 samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
-                res = classify_samples_with_indices(samples, rules_mat_upper, rules_mat_lower, return_masks=True)
+                res = classify_samples_with_indices(samples, refs_mat_upper, refs_mat_lower, return_masks=True)
 
                 counts["upper"] += int(res["upper"])
                 counts["lower"]  += int(res["lower"])
@@ -2147,15 +2285,15 @@ def run_rule_extraction_by_mcs(
                         tasks = []
                         for gi in range(n_gpus):
                             n_gi = per_gpu + (1 if gi < remainder else 0)
-                            rules_s_gi = rules_mat_upper.to(_gpu_devices[gi])
-                            rules_f_gi = rules_mat_lower.to(_gpu_devices[gi])
-                            tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                            refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
+                            refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
+                            tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
                         for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                             for k in c2:
                                 c2[k] += ci[k]
                     else:
                         s = sample_categorical(probs, sample_batch_size)
-                        ci = classify_samples(s, rules_mat_upper, rules_mat_lower)
+                        ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
                         for k in c2:
                             c2[k] += ci[k]
                 sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2174,17 +2312,19 @@ def run_rule_extraction_by_mcs(
                 "time_sec": dt,
                 "t_search": round(_t_search, 3),
                 "t_minimize": 0.0,
-                "t_rules": 0.0,
+                "t_refs": 0.0,
                 "t_probs": round(dt - _t_search, 3),
-                "n_rules_upper": int(len(rules_mat_upper)),
-                "n_rules_lower": int(len(rules_mat_lower)),
+                "n_refs_upper": int(len(refs_mat_upper)),
+                "n_refs_lower": int(len(refs_mat_lower)),
+                "n_sfun_upper": n_sfun_upper,
+                "n_sfun_lower": n_sfun_lower,
                 "probs_updated": probs_updated,
                 "p_upper": last_probs["upper"],
                 "p_lower": last_probs["lower"],
                 "p_unknown": last_probs["unknown"],
                 "n_sample_actual": n_sample_actual,
-                "avg_len_upper": _avg_rule_len(rules_upper),
-                "avg_len_lower": _avg_rule_len(rules_lower),
+                "avg_len_upper": _avg_rule_len(refs_upper),
+                "avg_len_lower": _avg_rule_len(refs_lower),
                 "rss_gb": rss_gb,
             })
 
@@ -2192,18 +2332,18 @@ def run_rule_extraction_by_mcs(
                 with open(metrics_path, "a", encoding="utf-8") as mf:
                     for e in metrics_log[-save_every:]:
                         mf.write(json.dumps(e) + "\n")
-                _save_json(rules_upper, rules_upper_path)
-                _save_json(rules_lower, rules_lower_path)
-                _save_pt(rules_mat_upper, rules_upper_pt_path)
-                _save_pt(rules_mat_lower, rules_lower_pt_path)
+                _save_json(refs_upper, refs_upper_path)
+                _save_json(refs_lower, refs_lower_path)
+                _save_pt(refs_mat_upper, refs_upper_pt_path)
+                _save_pt(refs_mat_lower, refs_lower_pt_path)
 
             continue  # go to next while-check (likely exit if unk_prob <= thresh)
 
-        # --- We have unknowns: extract unknown(s) and build rule(s) ---
+        # --- We have unknowns: extract unknown(s) and build ref(s) ---
         idx_unknown = res['idx_unknown']
 
         _ts = time.perf_counter()
-        if _pool is not None and min_rule_search:
+        if _pool is not None and min_ref_search:
             # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
             n_pick = min(n_workers, len(idx_unknown))
             perm = torch.randperm(len(idx_unknown))[:n_pick]
@@ -2223,11 +2363,13 @@ def run_rule_extraction_by_mcs(
             # Separate results into upper and lower batches
             new_surv_dicts = []
             new_fail_dicts = []
-            for min_comps_st, sys_st, fval in results:
+            for min_comps_st, sys_st, fval, n_sfun in results:
                 if sys_st >= sys_upper_st:
                     new_surv_dicts.append(min_comps_st)
+                    n_sfun_upper += n_sfun
                 else:
                     new_fail_dicts.append(min_comps_st)
+                    n_sfun_lower += n_sfun
 
                 if isinstance(fval, float):
                     fval = int(round(fval * 1000)) / 1000.0
@@ -2237,13 +2379,13 @@ def run_rule_extraction_by_mcs(
 
             # Batch update: one dominance check per type instead of N sequential ones
             if new_surv_dicts:
-                rules_upper, rules_mat_upper, n_add, n_rem = update_rules_batch(
-                    new_surv_dicts, rules_upper, rules_mat_upper, row_names, verbose=rule_update_verbose)
-                print(f"Survival: {n_add} rules added, {n_rem} removed (from {len(new_surv_dicts)} candidates)")
+                refs_upper, refs_mat_upper, n_add, n_rem = update_refs_batch(
+                    new_surv_dicts, refs_upper, refs_mat_upper, row_names, verbose=ref_update_verbose)
+                print(f"Survival: {n_add} refs added, {n_rem} removed (from {len(new_surv_dicts)} candidates)")
             if new_fail_dicts:
-                rules_lower, rules_mat_lower, n_add, n_rem = update_rules_batch(
-                    new_fail_dicts, rules_lower, rules_mat_lower, row_names, verbose=rule_update_verbose)
-                print(f"Failure: {n_add} rules added, {n_rem} removed (from {len(new_fail_dicts)} candidates)")
+                refs_lower, refs_mat_lower, n_add, n_rem = update_refs_batch(
+                    new_fail_dicts, refs_lower, refs_mat_lower, row_names, verbose=ref_update_verbose)
+                print(f"Failure: {n_add} refs added, {n_rem} removed (from {len(new_fail_dicts)} candidates)")
 
             if sys_val_list:
                 sys_val_list.sort(key=mixed_sort_key)
@@ -2258,35 +2400,41 @@ def run_rule_extraction_by_mcs(
             comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}
 
             fval, sys_st, min_comps_st0 = sfun(comps_st_test)
+            # The seed sfun call above is counted below under whichever side
+            # (upper / lower) the sample lands on.
             if min_comps_st0 is None:
                 min_comps_st0 = comps_st_test.copy()
             elif isinstance(next(iter(min_comps_st0.values())), tuple):
                 min_comps_st0 = {k: v[1] for k, v in min_comps_st0.items()}
 
             if sys_st >= sys_upper_st:
-                if min_rule_search:
+                if min_ref_search:
                     min_comps_st, info = minimise_upper_states_random(min_comps_st0, sfun, sys_upper_st=sys_upper_st, fval=fval)
                     fval = info.get('final_sys_state', fval)
+                    n_sfun_upper += 1 + int(info.get('attempts', 0))
                 else:
                     min_comps_st = get_min_upper_comps_st(min_comps_st0, sys_upper_st=sys_upper_st)
+                    n_sfun_upper += 1
             else:
-                if min_rule_search:
+                if min_ref_search:
                     min_comps_st, info = minimise_lower_states_random(min_comps_st0, sfun, max_state=n_state-1, sys_lower_st=sys_upper_st-1, fval=fval)
                     fval = info.get('final_sys_state', fval)
+                    n_sfun_lower += 1 + int(info.get('attempts', 0))
                 else:
                     min_comps_st = get_min_lower_comps_st(min_comps_st0, max_st=n_state-1, sys_lower_st=sys_upper_st-1)
+                    n_sfun_lower += 1
             _t_minimize = time.perf_counter() - _ts
 
             _ts = time.perf_counter()
             if sys_st >= sys_upper_st:
                 print("Survival sample found from sampling.")
-                rules_upper, rules_mat_upper = update_rules(min_comps_st, rules_upper, rules_mat_upper, row_names, verbose=rule_update_verbose)
+                refs_upper, refs_mat_upper = update_refs(min_comps_st, refs_upper, refs_mat_upper, row_names, verbose=ref_update_verbose)
             else:
                 print("Failure sample found from sampling.")
-                rules_lower, rules_mat_lower = update_rules(min_comps_st, rules_lower, rules_mat_lower, row_names, verbose=rule_update_verbose)
+                refs_lower, refs_mat_lower = update_refs(min_comps_st, refs_lower, refs_mat_lower, row_names, verbose=ref_update_verbose)
 
-            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
-            print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+            print(f"New ref added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
+            print(f"New ref (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
 
             if isinstance(fval, float):
                 fval = int(round(fval * 1000)) / 1000.0
@@ -2296,8 +2444,8 @@ def run_rule_extraction_by_mcs(
                 print(f"Updated sys_vals: {sys_val_list}")
 
         # ---- Periodic probability (bound) test via sampling ----
-        if _t_rules == 0.0:
-            _t_rules = time.perf_counter() - _ts
+        if _t_refs == 0.0:
+            _t_refs = time.perf_counter() - _ts
         probs_updated = False
         _ts = time.perf_counter()
         if (n_round % prob_update_every) == 0:
@@ -2311,15 +2459,15 @@ def run_rule_extraction_by_mcs(
                     tasks = []
                     for gi in range(n_gpus):
                         n_gi = per_gpu + (1 if gi < remainder else 0)
-                        rules_s_gi = rules_mat_upper.to(_gpu_devices[gi])
-                        rules_f_gi = rules_mat_lower.to(_gpu_devices[gi])
-                        tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                        refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
+                        refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
+                        tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
                     for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                         for k in c2:
                             c2[k] += ci[k]
                 else:
                     s = sample_categorical(probs, sample_batch_size)
-                    ci = classify_samples(s, rules_mat_upper, rules_mat_lower)
+                    ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
                     for k in c2:
                         c2[k] += ci[k]
             sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2339,17 +2487,19 @@ def run_rule_extraction_by_mcs(
             "time_sec": dt,
             "t_search": round(_t_search, 3),
             "t_minimize": round(_t_minimize, 3),
-            "t_rules": round(_t_rules, 3),
+            "t_refs": round(_t_refs, 3),
             "t_probs": round(_t_probs, 3),
-            "n_rules_upper": int(len(rules_mat_upper)),
-            "n_rules_lower": int(len(rules_mat_lower)),
+            "n_refs_upper": int(len(refs_mat_upper)),
+            "n_refs_lower": int(len(refs_mat_lower)),
+            "n_sfun_upper": n_sfun_upper,
+            "n_sfun_lower": n_sfun_lower,
             "probs_updated": probs_updated,
             "p_upper": last_probs["upper"],
             "p_lower": last_probs["lower"],
             "p_unknown": last_probs["unknown"],
             "n_sample_actual": n_sample_actual,
-            "avg_len_upper": _avg_rule_len(rules_upper),
-            "avg_len_lower": _avg_rule_len(rules_lower),
+            "avg_len_upper": _avg_rule_len(refs_upper),
+            "avg_len_lower": _avg_rule_len(refs_lower),
             "rss_gb": rss_gb,
         })
 
@@ -2357,10 +2507,10 @@ def run_rule_extraction_by_mcs(
             with open(metrics_path, "a", encoding="utf-8") as mf:
                 for e in metrics_log[-save_every:]:
                     mf.write(json.dumps(e) + "\n")
-            _save_json(rules_upper, rules_upper_path)
-            _save_json(rules_lower, rules_lower_path)
-            _save_pt(rules_mat_upper, rules_upper_pt_path)
-            _save_pt(rules_mat_lower, rules_lower_pt_path)
+            _save_json(refs_upper, refs_upper_path)
+            _save_json(refs_lower, refs_lower_path)
+            _save_pt(refs_mat_upper, refs_upper_pt_path)
+            _save_pt(refs_mat_lower, refs_lower_pt_path)
 
         if n_round >= max_rounds:
             print(f"Reached maximum rounds ({max_rounds}). Terminating.")
@@ -2373,11 +2523,11 @@ def run_rule_extraction_by_mcs(
             for e in metrics_log[last_flushed_rounds:]:
                 mf.write(json.dumps(e) + "\n")
 
-    # Final snapshot of rules
-    _save_json(rules_upper, rules_upper_path)
-    _save_json(rules_lower, rules_lower_path)
-    _save_pt(rules_mat_upper, rules_upper_pt_path)
-    _save_pt(rules_mat_lower, rules_lower_pt_path)
+    # Final snapshot of refs
+    _save_json(refs_upper, refs_upper_path)
+    _save_json(refs_lower, refs_lower_path)
+    _save_pt(refs_mat_upper, refs_upper_pt_path)
+    _save_pt(refs_mat_lower, refs_lower_pt_path)
 
     # Final probability check
     loops = max(n_sample // sample_batch_size, 1)
@@ -2390,15 +2540,15 @@ def run_rule_extraction_by_mcs(
             tasks = []
             for gi in range(n_gpus):
                 n_gi = per_gpu + (1 if gi < remainder else 0)
-                rules_s_gi = rules_mat_upper.to(_gpu_devices[gi])
-                rules_f_gi = rules_mat_lower.to(_gpu_devices[gi])
-                tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
+                refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
+                tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
             for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                 for k in c2:
                     c2[k] += ci[k]
         else:
             s = sample_categorical(probs, sample_batch_size)
-            ci = classify_samples(s, rules_mat_upper, rules_mat_lower)
+            ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
             for k in c2:
                 c2[k] += ci[k]
     sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2410,15 +2560,17 @@ def run_rule_extraction_by_mcs(
     metrics_log.append({
         "round": n_round,
         "time_sec": 0.0,
-        "n_rules_upper": int(len(rules_mat_upper)),
-        "n_rules_lower": int(len(rules_mat_lower)),
+        "n_refs_upper": int(len(refs_mat_upper)),
+        "n_refs_lower": int(len(refs_mat_lower)),
+        "n_sfun_upper": 0,
+        "n_sfun_lower": 0,
         "probs_updated": True,
         "p_upper": sp2["upper"],
         "p_lower": sp2["lower"],
         "p_unknown": sp2["unknown"],
-        "avg_len_upper": _avg_rule_len(rules_upper),
-        "avg_len_lower": _avg_rule_len(rules_lower),
-        "rss_gb": rss_gb,   
+        "avg_len_upper": _avg_rule_len(refs_upper),
+        "avg_len_lower": _avg_rule_len(refs_lower),
+        "rss_gb": rss_gb,
     })
 
     # ---- clean up worker pools ----
@@ -2431,10 +2583,10 @@ def run_rule_extraction_by_mcs(
     return {
         "sys_vals": sorted(sys_val_list, key=mixed_sort_key),
         "metrics_path": metrics_path,
-        "rules_upper_path": rules_upper_path,
-        "rules_lower_path": rules_lower_path,
-        "rules_upper_pt_path": rules_upper_pt_path,
-        "rules_lower_pt_path": rules_lower_pt_path,
+        "refs_upper_path": refs_upper_path,
+        "refs_lower_path": refs_lower_path,
+        "refs_upper_pt_path": refs_upper_pt_path,
+        "refs_lower_pt_path": refs_lower_pt_path,
         "metrics_log": metrics_log,
     }
 

@@ -52,36 +52,36 @@ def test_get_min_upper_comps_st2():
     assert min_comps_st == {'x1': ('>=', 2),'x3': ('>=', 2), 'x4': ('>=', 2), 'sys': ('>=', 1)}, f"Expected {{'x1': ('>=', 2),'x3': ('>=', 2),'x4': ('>=', 2), 'sys': ('>=', 1)}}, got {min_comps_st}"
 
 
-def test_from_rule_dict_to_mat1():
+def test_from_ref_dict_to_mat1():
     rule = {'x1': ('>=', 2), 'x2': ('>=', 2), 'sys': ('>=', 1)}
     col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 3
 
-    rule_mat = rsr.from_rule_dict_to_mat(rule, col_names, max_st)
+    rule_mat = rsr.from_ref_dict_to_mat(rule, col_names, max_st)
 
     assert torch.equal(rule_mat, torch.tensor([[0, 0, 1],
                                                [0, 0, 1],
                                                [1, 1, 1],
                                                [1, 1, 1]], device=rule_mat.device))
 
-def test_from_rule_dict_to_mat2():
+def test_from_ref_dict_to_mat2():
     rule = {'x1': ('>=', 2), 'x2': ('>=', 2), 'x3': ('>=', 2), 'x4': ('>=', 1), 'sys': ('>=', 1)}
     col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 3
 
-    rule_mat = rsr.from_rule_dict_to_mat(rule, col_names, max_st)
+    rule_mat = rsr.from_ref_dict_to_mat(rule, col_names, max_st)
 
     assert torch.equal(rule_mat, torch.tensor([[0, 0, 1],
                                                [0, 0, 1],
                                                [0, 0, 1],
                                                [0, 1, 1]], device=rule_mat.device))
 
-def test_from_rule_dict_to_mat3():
+def test_from_ref_dict_to_mat3():
     rule = {'x2': ('<=', 1), 'x3': ('<', 1), 'x4': ('<=', 0), 'sys': ('<=', 0)}
     col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 4
 
-    rule_mat = rsr.from_rule_dict_to_mat(rule, col_names, max_st)
+    rule_mat = rsr.from_ref_dict_to_mat(rule, col_names, max_st)
 
     assert torch.equal(rule_mat, torch.tensor([[1, 1, 1, 1],
                                                [1, 1, 0, 0],
@@ -997,11 +997,11 @@ def test_mask_from_first_one2():
 
 
 
-def test_update_rules1(ex_upper_lower_rules_with_dict):
+def test_update_refs1(ex_upper_lower_rules_with_dict):
     rules_mat_upper, rules_mat_lower, rules_upper, rules_lower, row_names = ex_upper_lower_rules_with_dict
 
     min_comps_st = {'x1': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}
-    rules_dict, rules_mat = rsr.update_rules(min_comps_st, rules_lower, rules_mat_lower, row_names)
+    rules_dict, rules_mat = rsr.update_refs(min_comps_st, rules_lower, rules_mat_lower, row_names)
 
     expected_rules_dict = [{'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
                            {'x1': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
@@ -1014,11 +1014,11 @@ def test_update_rules1(ex_upper_lower_rules_with_dict):
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
 
-def test_update_rules2(ex_upper_lower_rules_with_dict):
+def test_update_refs2(ex_upper_lower_rules_with_dict):
     rules_mat_upper, rules_mat_lower, rules_upper, rules_lower, row_names = ex_upper_lower_rules_with_dict
 
     min_comps_st = {'x1': ('>=', 1), 'x2': ('>=', 2), 'sys': ('>=', 1)}
-    rules_dict, rules_mat = rsr.update_rules(min_comps_st, rules_upper, rules_mat_upper, row_names)
+    rules_dict, rules_mat = rsr.update_refs(min_comps_st, rules_upper, rules_mat_upper, row_names)
 
     expected_rules_dict = [{'x4': ('>=', 2), 'sys': ('>=', 1)},
                            {'x3': ('>=', 1), 'x4': ('>=', 1), 'sys': ('>=', 1)},
@@ -1035,11 +1035,11 @@ def test_update_rules2(ex_upper_lower_rules_with_dict):
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
 
-def test_update_rules3(ex_upper_lower_rules_with_dict):
+def test_update_refs3(ex_upper_lower_rules_with_dict):
     rules_mat_upper, rules_mat_lower, rules_upper, rules_lower, row_names = ex_upper_lower_rules_with_dict
 
     min_comps_st = {'x1': ('>=', 1), 'x4': ('>=', 2), 'sys': ('>=', 1)}
-    rules_dict, rules_mat = rsr.update_rules(min_comps_st, rules_upper, rules_mat_upper, row_names)
+    rules_dict, rules_mat = rsr.update_refs(min_comps_st, rules_upper, rules_mat_upper, row_names)
 
     expected_rules_dict = [{'x4': ('>=', 2), 'sys': ('>=', 1)},
                            {'x3': ('>=', 1), 'x4': ('>=', 1), 'sys': ('>=', 1)},
@@ -1054,11 +1054,11 @@ def test_update_rules3(ex_upper_lower_rules_with_dict):
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
 
-def test_update_rules4(ex_upper_lower_rules_with_dict):
+def test_update_refs4(ex_upper_lower_rules_with_dict):
     rules_mat_upper, rules_mat_lower, rules_upper, rules_lower, row_names = ex_upper_lower_rules_with_dict
 
     min_comps_st = {'x2': ('<=', 0), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)}
-    rules_dict, rules_mat = rsr.update_rules(min_comps_st, rules_lower, rules_mat_lower, row_names)
+    rules_dict, rules_mat = rsr.update_refs(min_comps_st, rules_lower, rules_mat_lower, row_names)
 
     expected_rules_dict = [{'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
                            {'x1': ('<=', 0),'x2': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
@@ -1072,8 +1072,8 @@ def test_update_rules4(ex_upper_lower_rules_with_dict):
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
 
 
-def test_update_rules_batch_matches_sequential(ex_upper_lower_rules_with_dict):
-    """Batch update_rules should produce same results as sequential calls."""
+def test_update_refs_batch_matches_sequential(ex_upper_lower_rules_with_dict):
+    """Batch update_refs should produce same results as sequential calls."""
     rules_mat_upper, rules_mat_lower, rules_upper, rules_lower, row_names = ex_upper_lower_rules_with_dict
 
     # Two new rules to add sequentially
@@ -1082,14 +1082,14 @@ def test_update_rules_batch_matches_sequential(ex_upper_lower_rules_with_dict):
         {'x2': ('<=', 0), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
     ]
 
-    # Sequential: apply update_rules one by one
+    # Sequential: apply update_refs one by one
     seq_dict = list(rules_lower)
     seq_mat = rules_mat_lower.clone()
     for rd in new_rules:
-        seq_dict, seq_mat = rsr.update_rules(rd, seq_dict, seq_mat, row_names)
+        seq_dict, seq_mat = rsr.update_refs(rd, seq_dict, seq_mat, row_names)
 
     # Batch: apply all at once
-    batch_dict, batch_mat, n_added, n_removed = rsr.update_rules_batch(
+    batch_dict, batch_mat, n_added, n_removed = rsr.update_refs_batch(
         new_rules, list(rules_lower), rules_mat_lower.clone(), row_names)
 
     # Both should have the same rules (order may differ, so compare as sets of tuples)
@@ -1103,7 +1103,7 @@ def test_update_rules_batch_matches_sequential(ex_upper_lower_rules_with_dict):
     assert torch.equal(seq_sorted, batch_sorted), f"Mats differ"
 
 
-def test_update_rules_batch_empty_existing(ex_upper_lower_rules_with_dict):
+def test_update_refs_batch_empty_existing(ex_upper_lower_rules_with_dict):
     """Batch update with no existing rules."""
     _, _, _, _, row_names = ex_upper_lower_rules_with_dict
 
@@ -1114,7 +1114,7 @@ def test_update_rules_batch_empty_existing(ex_upper_lower_rules_with_dict):
         {'x2': ('>=', 2), 'sys': ('>=', 1)},
     ]
 
-    rules_dict, rules_mat, n_added, n_removed = rsr.update_rules_batch(
+    rules_dict, rules_mat, n_added, n_removed = rsr.update_refs_batch(
         new_rules, [], empty_mat, row_names)
 
     assert n_added == 2
@@ -1123,7 +1123,7 @@ def test_update_rules_batch_empty_existing(ex_upper_lower_rules_with_dict):
     assert rules_mat.shape[0] == 2
 
 
-def test_update_rules_batch_new_dominated_by_new():
+def test_update_refs_batch_new_dominated_by_new():
     """When a new rule dominates another new rule, only the dominator survives."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     row_names = ['x1', 'x2']
@@ -1134,7 +1134,7 @@ def test_update_rules_batch_new_dominated_by_new():
         {'x1': ('<=', 0), 'sys': ('<=', 0)},  # less specific (dominates the above)
     ]
 
-    rules_dict, rules_mat, n_added, n_removed = rsr.update_rules_batch(
+    rules_dict, rules_mat, n_added, n_removed = rsr.update_refs_batch(
         new_rules, [], empty_mat, row_names)
 
     assert n_added == 1
@@ -1143,7 +1143,7 @@ def test_update_rules_batch_new_dominated_by_new():
     assert 'x2' not in rules_dict[0] or rules_dict[0].get('x2', (None, None))[1] != 0
 
 
-def test_update_rules_batch_duplicate_rules():
+def test_update_refs_batch_duplicate_rules():
     """Duplicate rules should not eliminate each other — one copy must survive."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     row_names = ['x1', 'x2']
@@ -1152,7 +1152,7 @@ def test_update_rules_batch_duplicate_rules():
     rule = {'x1': ('<=', 0), 'sys': ('<=', 0)}
     new_rules = [dict(rule), dict(rule), dict(rule)]  # 3 identical rules
 
-    rules_dict, rules_mat, n_added, n_removed = rsr.update_rules_batch(
+    rules_dict, rules_mat, n_added, n_removed = rsr.update_refs_batch(
         new_rules, [], empty_mat, row_names)
 
     assert n_added == 1, f"Expected 1 rule added from 3 duplicates, got {n_added}"
@@ -1333,8 +1333,8 @@ def test_get_comp_cond_sys_prob__two_state(def_five_comp):
     # For the single-threshold API, sys_upper_st=1 means system survives if state >= 1
     torch.manual_seed(0)
     cond_probs = rsr.get_comp_cond_sys_prob(
-        rules_mat_upper=upper_rules,
-        rules_mat_lower=lower_rules,
+        refs_mat_upper=upper_rules,
+        refs_mat_lower=lower_rules,
         probs=probs,
         comps_st_cond={},         # no conditioning
         row_names=row_names,

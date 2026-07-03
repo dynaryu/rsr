@@ -66,7 +66,36 @@ python demos/ieee14_blackout/run_demo.py --device cpu
 python demos/ieee14_blackout/run_demo.py --devices cuda:0,cuda:1
 ```
 
-Needs `torch`, `numpy`, `scipy`. Uses CUDA automatically when available.
+Needs `torch`, `numpy`, `scipy`, `typer`. Uses CUDA automatically when available.
+
+## Repeat runs and summarise (`--runs`)
+
+RSR is stochastic, so repeated runs give slightly different bounds and rule
+counts. Pass `--runs N` to the same script: it builds the model once, runs the
+extraction N times (each into `out/run_NN/`), reads the last line of every run's
+`metrics.json`, and reports the run-to-run distribution of P(blackout), the
+bound gap, rule counts, rounds and per-run runtime. Per-run RSR logs are hidden
+unless you pass `--verbose`.
+
+```bash
+python demos/ieee14_blackout/run_demo.py --runs 10
+python demos/ieee14_blackout/run_demo.py --runs 5 --unk-thres 1e-5 --device cpu
+```
+
+```
+ run  rounds  runtime_s   P(blackout)        gap   surv   fail
+   0      37        2.7     1.100e-04    1.0e-05     34      3
+   ...
+      metric         mean          std          min          max     cv%
+ P(blackout)    1.200e-04    3.162e-05    8.000e-05    1.500e-04   26.4
+   fail rules         5.75         2.99         3.00        10.00   51.9
+  Mean P(blackout) = 1.200e-04   (reference p_f ~ 1.1e-4, ratio 1.09)
+```
+
+`runtime_s` is the per-run extraction wall-clock (the model is loaded once up
+front, so it excludes startup). A tighter `--unk-thres` (or more `--n-sample`)
+shrinks the P(blackout) spread. Writes `out/summary.json` with the per-run and
+aggregate stats, plus each run's own `reliability.json` / `critical_components.csv`.
 
 ## Example output (single GPU, ~3 s)
 
