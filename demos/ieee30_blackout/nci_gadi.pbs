@@ -1,0 +1,48 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job: RSR IEEE 30-bus blackout demo (gpuvolta, 2x V100 + 24 CPU).
+# Conventions taken from the working run_rsr.sh in this folder (project n74).
+# Submit with:  qsub nci_gadi.pbs
+#
+# gpuvolta allocates 12 CPUs + ~95.5 GB per GPU, so ngpus=2 -> ncpus=24 /
+# mem=191GB (half a node). For a full node use ngpus=4 / ncpus=48 / mem=382GB.
+# Check the venv path / project / storage mounts below before submitting.
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m e
+#PBS -P n74
+#PBS -q gpuvolta
+#PBS -l walltime=24:00:00
+#PBS -l ngpus=2
+#PBS -l ncpus=24
+#PBS -l mem=191GB
+#PBS -l jobfs=12GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -l other=hyperthread
+#PBS -N rsr_ieee30
+
+module load python3/3.12.1
+module load cuda
+source /g/data/n74/hxr547/tsum/.venv/bin/activate     # torch + scipy + typer
+
+RSR_ROOT=/scratch/n74/hxr547/rsr                       # rsr checkout on Gadi
+cd "$RSR_ROOT/demos/ieee30_blackout"
+
+echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=${PBS_NCPUS:-?}"
+
+# --devices auto  -> the GPUs PBS allocated (2 here) for multi-GPU sampling.
+# --n-workers     -> CPU processes for sfun + minimisation. With -l other=hyperthread
+#                    you can oversubscribe past ncpus (run_rsr.sh used 96 on ncpus=24);
+#                    48 = one worker per logical thread. Use -1 for PBS_NCPUS (=24).
+# Relative stopping rule so this 71-component network terminates in a practical
+# number of rounds; tighten --unk-thres toward 0 for a narrower bound.
+python3 -u run_demo.py \
+    --devices auto \
+    --n-workers 48 \
+    --unk-opt rel --unk-thres 0.2 \
+    --n-sample 10000000 --batch 100000 \
+    --out "$RSR_ROOT/demos/ieee30_blackout/out_nci" \
+    &> "$PBS_JOBID.log"
+
+# For a run-to-run distribution instead of one estimate, add e.g. --runs 10.

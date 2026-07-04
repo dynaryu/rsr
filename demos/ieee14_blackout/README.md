@@ -130,8 +130,8 @@ no single point of failure.
 |---|---|
 | `reliability.json` | P(blackout), P(survival), bounds, rule/cut-set counts, single points of failure, smallest cut-sets |
 | `critical_components.csv` | per-component criticality ranking |
-| `rules_geq_1.json` | survival rules |
-| `rules_leq_0.json` | failure rules = minimal cut-sets |
+| `refs_up_1.json` | survival rules |
+| `refs_low_0.json` | failure rules = minimal cut-sets |
 | `metrics.json` | per-round convergence log |
 
 The two rule sets are **probability-independent** properties of the topology and

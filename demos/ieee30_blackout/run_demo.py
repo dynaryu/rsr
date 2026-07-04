@@ -1,16 +1,16 @@
 """
-RSR demo: IEEE 14-bus DC-OPF blackout reliability.
+RSR demo: IEEE 30-bus DC-OPF blackout reliability.
 
-Estimates the probability of a system-wide blackout for the IEEE 14-bus power
+Estimates the probability of a system-wide blackout for the IEEE 30-bus power
 system and identifies the critical failure modes (minimal cut-sets) that drive
 it, using RSR's branch-and-bound rule extraction.
 
 The model is the multi-state DC-OPF blackout case from Chan et al. (2024):
-  - 34 failable components: 5 generator buses (4 states), 9 ordinary buses
-    (2 states) and 20 branches (2 states);
+  - 71 failable components: 6 generator buses (4 states), 24 ordinary buses
+    (2 states) and 41 branches (2 states);
   - each component is failed when its state index is low and operational when
     high, so the system function is coherent (monotone) in the state indices;
-  - the system FAILS when the DC-OPF blackout size exceeds 54.8% of demand
+  - the system FAILS when the DC-OPF blackout size exceeds 40.2% of demand
     (Scenario 1 in the reference), otherwise it SURVIVES.
 
 RSR discovers, by Monte Carlo sampling + minimisation, two reusable rule sets:
@@ -22,7 +22,7 @@ These bound P(blackout) from below and above (the gap is the "unknown"
 probability) and the failure rules ARE the minimal cut-sets, from which the
 per-component criticality ranking is read off.
 
-Data is read from the `ieee14` network dataset (edges/probs + MATPOWER case)
+Data is read from the `ieee30` network dataset (edges/probs + MATPOWER case)
 and the system function is the dataset's pure-Python DC-OPF sfun (scipy linprog,
 no MATLAB dependency).
 
@@ -52,7 +52,7 @@ import typer
 import pdb
 
 # Reference from the paper (Chan et al. 2024, Table 2, Scenario 1)
-REF_PF = 1.1e-4
+REF_PF = 1.0e-4
 
 HERE = Path(__file__).resolve().parent
 # repo root (…/rsr) so `import rsr.rsr` works when run from anywhere
@@ -60,7 +60,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 import rsr.rsr as rsr  # noqa: E402
 
-DEFAULT_DATASET = Path.home() / "Projects/network-datasets/datasets/ieee14/v1"
+DEFAULT_DATASET = Path.home() / "Projects/network-datasets/datasets/ieee30/v1"
 
 app = typer.Typer(add_completion=False, help=__doc__)
 
@@ -69,7 +69,7 @@ app = typer.Typer(add_completion=False, help=__doc__)
 # Data / model
 # ----------------------------------------------------------------------------
 def load_dataset(dataset: Path):
-    """Load the ieee14 probs and return the DC-OPF system function factory."""
+    """Load the ieee30 probs and return the DC-OPF system function factory."""
     data_dir = dataset / "data"
     scripts_dir = dataset / "scripts"
     if not (data_dir / "probs.json").exists():
@@ -79,7 +79,7 @@ def load_dataset(dataset: Path):
     from sfun_dcopt import make_dcopt_sfun  # noqa: E402
 
     probs_dict = json.load(open(data_dir / "probs.json"))
-    return probs_dict, make_dcopt_sfun, str(data_dir / "ieee14.m")
+    return probs_dict, make_dcopt_sfun, str(data_dir / "ieee30.m")
 
 
 def build_probs_tensor(probs_dict, device):
@@ -131,8 +131,13 @@ def build_model(dataset, device, threshold, alpha):
 
 
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
-            max_rounds, n_sample, batch, multi_devices, quiet):
-    """Run one RSR rule extraction into `out`. Returns (res, wall_seconds)."""
+            max_rounds, n_sample, batch, multi_devices, n_workers, quiet):
+    """Run one RSR rule extraction into `out`. Returns (res, wall_seconds).
+
+    `multi_devices` (list of GPUs) parallelises the sampling/classification;
+    `n_workers` (CPU processes) parallelises the sfun evaluation + minimisation.
+    The two are independent and can be combined on an HPC GPU node.
+    """
     out.mkdir(parents=True, exist_ok=True)
     # metrics.json is appended to by RSR; drop any stale copy from a prior run
     stale = out / "metrics.json"
@@ -146,7 +151,7 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             refs_upper=[], refs_lower=[],
             unk_prob_thres=unk_thres, unk_prob_opt=unk_opt,
             n_sample=n_sample, max_rounds=max_rounds, sample_batch_size=batch,
-            devices=multi_devices, output_dir=str(out),
+            devices=multi_devices, n_workers=n_workers, output_dir=str(out),
         )
 
     t0 = time.time()
@@ -340,26 +345,47 @@ def summarise(runs, out: Path):
 
 
 # ----------------------------------------------------------------------------
-# CLI
+# HPC / NCI resource detection
 # ----------------------------------------------------------------------------
-@app.command()
-def main(
-    runs: int = typer.Option(1, help="Repetitions; 1 = full report, >1 = summarise metrics.json"),
-    dataset: Path = typer.Option(DEFAULT_DATASET, help="ieee14 dataset version dir (data/ + scripts/)"),
-    threshold: float = typer.Option(54.8, help="Blackout size (%) above which the system fails"),
-    alpha: float = typer.Option(2.0, help="Branch capacity scaling factor for the DC-OPF case"),
-    unk_thres: float = typer.Option(1e-6, help="Convergence threshold on the unknown (bound-gap) probability"),
-    unk_opt: str = typer.Option("abs", help="Interpret --unk-thres as 'abs' or 'rel' to P(failure)"),
-    max_rounds: int = typer.Option(500_000, help="Max extraction rounds"),
-    n_sample: int = typer.Option(10_000_000, help="Samples per probability/search round"),
-    batch: int = typer.Option(100_000, help="Sample batch size"),
-    device: str = typer.Option("", help="Single torch device, e.g. 'cpu' or 'cuda' (default: auto)"),
-    devices: str = typer.Option("", help="Comma-separated multi-GPU devices, e.g. 'cuda:0,cuda:1'"),
-    out: Path = typer.Option(HERE / "out", help="Output dir (single run) / base dir (multi run)"),
-    verbose: bool = typer.Option(False, help="Show RSR's per-round log during multi runs"),
-):
-    """Estimate P(blackout) and the critical failure modes for the IEEE 14-bus grid."""
-    device_list = [d.strip() for d in devices.split(",") if d.strip()]
+def detect_gpus():
+    """List of visible CUDA devices as ['cuda:0', 'cuda:1', ...].
+
+    Honours CUDA_VISIBLE_DEVICES (which PBS sets from the -l ngpus request), so
+    it returns exactly the GPUs allocated to the job.
+    """
+    if not torch.cuda.is_available():
+        return []
+    return [f"cuda:{i}" for i in range(torch.cuda.device_count())]
+
+
+def detect_cpus():
+    """Number of CPUs available to this process.
+
+    On NCI/PBS the job's core count is in PBS_NCPUS; otherwise fall back to the
+    scheduling affinity (respects cpuset/cgroup limits) then os.cpu_count().
+    """
+    n = os.environ.get("PBS_NCPUS")
+    if n and n.isdigit():
+        return int(n)
+    try:
+        return len(os.sched_getaffinity(0))       # Linux: cores this job may use
+    except AttributeError:
+        return os.cpu_count() or 1
+
+
+def resolve_devices(device: str, devices: str):
+    """Turn --device / --devices (incl. the 'auto' sentinel) into (dev, multi_devices).
+
+    --devices auto  -> all GPUs the job can see (multi-GPU sampling when >1)
+    --devices a,b   -> explicit list
+    --device X      -> pin to a single device
+    (none)          -> first GPU if present, else CPU
+    """
+    if devices.strip().lower() == "auto":
+        device_list = detect_gpus()
+    else:
+        device_list = [d.strip() for d in devices.split(",") if d.strip()]
+
     multi_devices = device_list if len(device_list) > 1 else None
     if device:
         dev = torch.device(device)
@@ -367,16 +393,53 @@ def main(
         dev = torch.device(device_list[0])
     else:
         dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return dev, multi_devices, device_list
+
+
+def resolve_workers(n_workers: int):
+    """--n-workers: -1/0 -> auto (all available CPUs), else the given count."""
+    if n_workers <= 0:
+        return max(detect_cpus(), 1)
+    return n_workers
+
+
+# ----------------------------------------------------------------------------
+# CLI
+# ----------------------------------------------------------------------------
+@app.command()
+def main(
+    runs: int = typer.Option(1, help="Repetitions; 1 = full report, >1 = summarise metrics.json"),
+    dataset: Path = typer.Option(DEFAULT_DATASET, help="ieee30 dataset version dir (data/ + scripts/)"),
+    threshold: float = typer.Option(40.2, help="Blackout size (%) above which the system fails"),
+    alpha: float = typer.Option(2.0, help="Branch capacity scaling factor for the DC-OPF case"),
+    unk_thres: float = typer.Option(1e-6, help="Convergence threshold on the unknown (bound-gap) probability"),
+    unk_opt: str = typer.Option("abs", help="Interpret --unk-thres as 'abs' or 'rel' to P(failure)"),
+    max_rounds: int = typer.Option(500_000, help="Max extraction rounds"),
+    n_sample: int = typer.Option(10_000_000, help="Samples per probability/search round"),
+    batch: int = typer.Option(100_000, help="Sample batch size"),
+    device: str = typer.Option("", help="Single torch device, e.g. 'cpu' or 'cuda' (default: auto)"),
+    devices: str = typer.Option("", help="Multi-GPU sampling: 'cuda:0,cuda:1' or 'auto' (all visible GPUs)"),
+    n_workers: int = typer.Option(1, help="CPU worker processes for sfun + minimisation; -1 = all available CPUs"),
+    out: Path = typer.Option(HERE / "out", help="Output dir (single run) / base dir (multi run)"),
+    verbose: bool = typer.Option(False, help="Show RSR's per-round log during multi runs"),
+):
+    """Estimate P(blackout) and the critical failure modes for the IEEE 30-bus grid."""
+    dev, multi_devices, device_list = resolve_devices(device, devices)
+    n_workers = resolve_workers(n_workers)
 
     print("=" * 64)
-    print("RSR demo — IEEE 14-bus DC-OPF blackout reliability")
+    print("RSR demo — IEEE 30-bus DC-OPF blackout reliability")
     print("=" * 64)
+    gpu_str = ",".join(multi_devices) if multi_devices else str(dev)
+    print(f"  Resources:   GPUs={gpu_str}  CPU workers={n_workers}  "
+          f"(visible: {len(detect_gpus())} GPU, {detect_cpus()} CPU)")
 
     # Build the model once (shared across all repetitions).
     probs, row_names, n_state, sfun = build_model(dataset, dev, threshold, alpha)
 
     common = dict(unk_thres=unk_thres, unk_opt=unk_opt, max_rounds=max_rounds,
-                  n_sample=n_sample, batch=batch, multi_devices=multi_devices)
+                  n_sample=n_sample, batch=batch, multi_devices=multi_devices,
+                  n_workers=n_workers)
 
     if runs <= 1:
         # ---- single run: full report ----
