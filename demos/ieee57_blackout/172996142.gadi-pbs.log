@@ -1,0 +1,136 @@
+================================================================
+RSR demo — IEEE 57-bus DC-OPF blackout reliability
+================================================================
+  Resources:   GPUs=cuda:0,cuda:1  CPU workers=48  (visible: 2 GPU, 24 CPU)
+  Dataset:     /scratch/n74/hxr547/rsr/demos/ieee57_blackout/../../../network-datasets/datasets/ieee57/v1
+  Components:  137 (7 generator buses, 50 ordinary buses, 80 branches)
+  Max states:  4   Device: cuda:0
+  Threshold:   54.1% blackout → system failure
+DC-OPF sfun ready: 57 buses, 7 generators, 80 branches
+  All operational: blackout=  0.00%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+
+Repeating extraction x50 (unknown gap < 1e-05 [abs], samples/round 10,000,000)
+
+[1/50] run_00 ... P(blackout)=5.000e-05  gap=1.0e-05  fail_rules=103  50.3s
+[2/50] run_01 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=116  70.9s
+[3/50] run_02 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=76  35.0s
+[4/50] run_03 ... P(blackout)=1.050e-04  gap=1.0e-05  fail_rules=99  57.4s
+[5/50] run_04 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=89  40.9s
+[6/50] run_05 ... P(blackout)=1.400e-04  gap=1.0e-05  fail_rules=128  55.2s
+[7/50] run_06 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=99  44.2s
+[8/50] run_07 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=77  35.0s
+[9/50] run_08 ... P(blackout)=1.100e-04  gap=1.0e-05  fail_rules=132  64.6s
+[10/50] run_09 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=101  43.8s
+[11/50] run_10 ... P(blackout)=5.000e-05  gap=1.0e-05  fail_rules=81  35.5s
+[12/50] run_11 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=80  40.8s
+[13/50] run_12 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=109  52.1s
+[14/50] run_13 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=103  47.4s
+[15/50] run_14 ... P(blackout)=6.000e-05  gap=1.0e-05  fail_rules=105  55.3s
+[16/50] run_15 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=32  13.3s
+[17/50] run_16 ... P(blackout)=6.000e-05  gap=1.0e-05  fail_rules=141  62.5s
+[18/50] run_17 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=107  59.0s
+[19/50] run_18 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=104  50.8s
+[20/50] run_19 ... P(blackout)=1.600e-04  gap=1.0e-05  fail_rules=97  45.7s
+[21/50] run_20 ... P(blackout)=6.000e-05  gap=1.0e-05  fail_rules=103  51.4s
+[22/50] run_21 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=92  38.5s
+[23/50] run_22 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=109  55.7s
+[24/50] run_23 ... P(blackout)=5.000e-05  gap=1.0e-05  fail_rules=74  34.4s
+[25/50] run_24 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=114  54.0s
+[26/50] run_25 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=79  42.0s
+[27/50] run_26 ... P(blackout)=6.000e-05  gap=1.0e-05  fail_rules=81  34.7s
+[28/50] run_27 ... P(blackout)=1.100e-04  gap=1.0e-05  fail_rules=135  70.9s
+[29/50] run_28 ... P(blackout)=1.300e-04  gap=1.0e-05  fail_rules=136  77.1s
+[30/50] run_29 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=101  51.4s
+[31/50] run_30 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=81  34.5s
+[32/50] run_31 ... P(blackout)=1.100e-04  gap=1.0e-05  fail_rules=111  55.8s
+[33/50] run_32 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=67  33.3s
+[34/50] run_33 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=65  29.2s
+[35/50] run_34 ... P(blackout)=1.200e-04  gap=1.0e-05  fail_rules=92  42.2s
+[36/50] run_35 ... P(blackout)=5.000e-05  gap=1.0e-05  fail_rules=135  69.7s
+[37/50] run_36 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=79  37.2s
+[38/50] run_37 ... P(blackout)=4.000e-05  gap=1.0e-05  fail_rules=126  67.7s
+[39/50] run_38 ... P(blackout)=9.000e-05  gap=1.0e-05  fail_rules=50  26.2s
+[40/50] run_39 ... P(blackout)=1.200e-04  gap=1.0e-05  fail_rules=92  45.5s
+[41/50] run_40 ... P(blackout)=1.100e-04  gap=1.0e-05  fail_rules=81  43.1s
+[42/50] run_41 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=105  57.2s
+[43/50] run_42 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=114  54.8s
+[44/50] run_43 ... P(blackout)=8.000e-05  gap=1.0e-05  fail_rules=104  49.4s
+[45/50] run_44 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=125  69.6s
+[46/50] run_45 ... P(blackout)=7.000e-05  gap=1.0e-05  fail_rules=124  68.0s
+[47/50] run_46 ... P(blackout)=1.000e-04  gap=1.0e-05  fail_rules=92  41.2s
+[48/50] run_47 ... P(blackout)=1.300e-04  gap=1.0e-05  fail_rules=95  42.2s
+[49/50] run_48 ... P(blackout)=1.400e-04  gap=1.0e-05  fail_rules=99  44.3s
+[50/50] run_49 ... P(blackout)=4.000e-05  gap=1.0e-05  fail_rules=105  51.0s
+
+  Saved: /scratch/n74/hxr547/rsr/demos/ieee57_blackout/out_nci/all_metrics.json  (per-round metrics of all 50 runs)
+
+==========================================================================
+SUMMARY over 50 runs
+==========================================================================
+ run  rounds  runtime_s   P(blackout)        gap   surv   fail
+--------------------------------------------------------------
+   0      47       50.3     5.000e-05    1.0e-05    413    103
+   1      72       70.9     9.000e-05    1.0e-05    496    116
+   2      33       35.0     1.000e-04    1.0e-05    347     76
+   3      55       57.4     1.050e-04    1.0e-05    446     99
+   4      37       40.9     9.000e-05    1.0e-05    375     89
+   5      55       55.2     1.400e-04    1.0e-05    401    128
+   6      40       44.2     1.000e-04    1.0e-05    374     99
+   7      30       35.0     7.000e-05    1.0e-05    323     77
+   8      65       64.6     1.100e-04    1.0e-05    449    132
+   9      40       43.8     8.000e-05    1.0e-05    367    101
+  10      33       35.5     5.000e-05    1.0e-05    347     81
+  11      38       40.8     8.000e-05    1.0e-05    365     80
+  12      55       52.1     1.000e-04    1.0e-05    429    109
+  13      45       47.4     9.000e-05    1.0e-05    389    103
+  14      54       55.3     6.000e-05    1.0e-05    426    105
+  15      10       13.3     8.000e-05    1.0e-05    239     32
+  16      61       62.5     6.000e-05    1.0e-05    443    141
+  17      59       59.0     7.000e-05    1.0e-05    434    107
+  18      48       50.8     7.000e-05    1.0e-05    415    104
+  19      44       45.7     1.600e-04    1.0e-05    383     97
+  20      47       51.4     6.000e-05    1.0e-05    386    103
+  21      35       38.5     9.000e-05    1.0e-05    345     92
+  22      55       55.7     9.000e-05    1.0e-05    421    109
+  23      30       34.4     5.000e-05    1.0e-05    334     74
+  24      55       54.0     8.000e-05    1.0e-05    427    114
+  25      40       42.0     8.000e-05    1.0e-05    382     79
+  26      33       34.7     6.000e-05    1.0e-05    340     81
+  27      73       70.9     1.100e-04    1.0e-05    483    135
+  28      79       77.1     1.300e-04    1.0e-05    474    136
+  29      48       51.4     1.000e-04    1.0e-05    414    101
+  30      29       34.5     7.000e-05    1.0e-05    329     81
+  31      52       55.8     1.100e-04    1.0e-05    421    111
+  32      28       33.3     7.000e-05    1.0e-05    337     67
+  33      26       29.2     7.000e-05    1.0e-05    344     65
+  34      38       42.2     1.200e-04    1.0e-05    349     92
+  35      68       69.7     5.000e-05    1.0e-05    464    135
+  36      34       37.2     8.000e-05    1.0e-05    346     79
+  37      65       67.7     4.000e-05    1.0e-05    465    126
+  38      23       26.2     9.000e-05    1.0e-05    313     50
+  39      44       45.5     1.200e-04    1.0e-05    360     92
+  40      42       43.1     1.100e-04    1.0e-05    372     81
+  41      59       57.2     8.000e-05    1.0e-05    435    105
+  42      52       54.8     7.000e-05    1.0e-05    390    114
+  43      48       49.4     8.000e-05    1.0e-05    407    104
+  44      74       69.6     1.000e-04    1.0e-05    456    125
+  45      74       68.0     7.000e-05    1.0e-05    480    124
+  46      38       41.2     1.000e-04    1.0e-05    352     92
+  47      41       42.2     1.300e-04    1.0e-05    366     95
+  48      40       44.3     1.400e-04    1.0e-05    368     99
+  49      50       51.0     4.000e-05    1.0e-05    399    105
+
+--------------------------------------------------------------------------
+      metric         mean          std          min          max     cv%
+--------------------------------------------------------------------------
+ P(blackout)    8.690e-05    2.705e-05    4.000e-05    1.600e-04   31.1
+   bound gap    1.000e-05    0.000e+00    1.000e-05    1.000e-05    0.0
+  surv rules       392.40        52.35       239.00       496.00   13.3
+  fail rules        98.90        22.37        32.00       141.00   22.6
+      rounds        46.82        14.95        10.00        79.00   31.9
+   runtime_s        48.64        13.23        13.28        77.05   27.2
+--------------------------------------------------------------------------
+
+  Mean P(blackout) = 8.690e-05   (reference p_f ~ 1.0e-04, ratio 0.87)
+  Saved: /scratch/n74/hxr547/rsr/demos/ieee57_blackout/out_nci/summary.json
