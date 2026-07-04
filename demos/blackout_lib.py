@@ -105,7 +105,7 @@ def build_model(dataset, device, threshold, alpha):
 
 
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
-            max_rounds, n_sample, batch, multi_devices, n_workers, quiet):
+            max_search_loops, max_rounds, n_sample, batch, multi_devices, n_workers, quiet):
     """Run one RSR rule extraction into `out`. Returns (res, wall_seconds).
 
     `multi_devices` (list of GPUs) parallelises the sampling/classification;
@@ -124,7 +124,7 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             sys_upper_st=1,               # system states: 0 = blackout, 1 = survive
             refs_upper=[], refs_lower=[],
             unk_prob_thres=unk_thres, unk_prob_opt=unk_opt,
-            n_sample=n_sample, max_rounds=max_rounds, sample_batch_size=batch,
+            n_sample=n_sample, max_search_loops=max_search_loops, max_rounds=max_rounds, sample_batch_size=batch,
             devices=multi_devices, n_workers=n_workers, output_dir=str(out),
         )
 
@@ -375,7 +375,7 @@ def resolve_workers(n_workers: int):
 # Orchestration + CLI factory
 # ----------------------------------------------------------------------------
 def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
-        max_rounds, n_sample, batch, device, devices, n_workers, out, verbose, runs):
+        max_search_loops, max_rounds, n_sample, batch, device, devices, n_workers, out, verbose, runs):
     """Full demo run: single detailed report (runs<=1) or multi-run summary."""
     dev, multi_devices, _ = resolve_devices(device, devices)
     n_workers = resolve_workers(n_workers)
@@ -390,7 +390,7 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
     # Build the model once (shared across all repetitions).
     probs, row_names, n_state, sfun = build_model(dataset, dev, threshold, alpha)
 
-    common = dict(unk_thres=unk_thres, unk_opt=unk_opt, max_rounds=max_rounds,
+    common = dict(unk_thres=unk_thres, unk_opt=unk_opt, max_search_loops=max_search_loops, max_rounds=max_rounds,
                   n_sample=n_sample, batch=batch, multi_devices=multi_devices,
                   n_workers=n_workers)
 
@@ -447,7 +447,8 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
         alpha: float = typer.Option(2.0, help="Branch capacity scaling factor for the DC-OPF case"),
         unk_thres: float = typer.Option(1e-6, help="Convergence threshold on the unknown (bound-gap) probability"),
         unk_opt: str = typer.Option("abs", help="Interpret --unk-thres as 'abs' or 'rel' to P(failure)"),
-        max_rounds: int = typer.Option(500_000, help="Max extraction rounds"),
+        max_search_loops: int = typer.Option(500_000, help="Max batches per round"),
+        max_rounds: int = typer.Option(100_000, help="Max extraction rounds"),
         n_sample: int = typer.Option(10_000_000, help="Samples per probability/search round"),
         batch: int = typer.Option(100_000, help="Sample batch size"),
         device: str = typer.Option("", help="Single torch device, e.g. 'cpu' or 'cuda' (default: auto)"),
@@ -458,7 +459,7 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
     ):
         """Estimate P(blackout) and the critical failure modes for this grid."""
         run(title=title, ref_pf=ref_pf, dataset=dataset, threshold=threshold, alpha=alpha,
-            unk_thres=unk_thres, unk_opt=unk_opt, max_rounds=max_rounds, n_sample=n_sample,
+            unk_thres=unk_thres, unk_opt=unk_opt, max_search_loops=max_search_loops, max_rounds=max_rounds, n_sample=n_sample,
             batch=batch, device=device, devices=devices, n_workers=n_workers, out=out,
             verbose=verbose, runs=runs)
 
