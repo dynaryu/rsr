@@ -1,0 +1,137 @@
+{
+  "p_blackout": 7.67e-05,
+  "p_survival": 0.9998387,
+  "unknown_gap": 8.46e-05,
+  "p_blackout_bounds": [
+    7.67e-05,
+    0.0001613
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 40.2,
+  "runtime_sec": 25.455044507980347,
+  "n_survival_rules": 726,
+  "n_failure_rules": 204,
+  "n_cutsets": 204,
+  "single_points_of_failure": [],
+  "smallest_cutsets": [
+    {
+      "vbus2": 0,
+      "vbus6": 0,
+      "vbus27": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus3": 0,
+      "vbus13": 0,
+      "vbus21": 0
+    },
+    {
+      "vbus7": 0,
+      "vbus8": 0,
+      "vbus12": 0,
+      "vbus20": 0
+    },
+    {
+      "vbus1": 0,
+      "vbus2": 0,
+      "vbus22": 1,
+      "vbus27": 1
+    },
+    {
+      "vbus2": 0,
+      "vbus13": 0,
+      "vbus22": 1,
+      "br2": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus22": 1,
+      "vbus27": 1,
+      "br2": 0
+    },
+    {
+      "vbus1": 0,
+      "vbus2": 0,
+      "vbus13": 1,
+      "vbus28": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus4": 0,
+      "vbus13": 0,
+      "vbus23": 0
+    },
+    {
+      "vbus1": 0,
+      "vbus2": 1,
+      "vbus13": 0,
+      "vbus27": 0
+    },
+    {
+      "vbus1": 0,
+      "vbus2": 0,
+      "vbus13": 2,
+      "vbus22": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus3": 0,
+      "vbus22": 0,
+      "vbus27": 2
+    },
+    {
+      "vbus2": 0,
+      "vbus22": 1,
+      "vbus27": 0,
+      "br7": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus23": 0,
+      "vbus27": 1,
+      "br2": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus12": 0,
+      "vbus22": 1,
+      "br4": 0
+    },
+    {
+      "vbus1": 1,
+      "vbus2": 0,
+      "vbus13": 0,
+      "vbus22": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus3": 0,
+      "vbus22": 1,
+      "vbus27": 1
+    },
+    {
+      "vbus2": 0,
+      "vbus27": 1,
+      "br4": 0,
+      "br16": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus8": 0,
+      "vbus20": 0,
+      "br9": 0
+    },
+    {
+      "vbus2": 0,
+      "vbus6": 0,
+      "vbus24": 0,
+      "vbus27": 1
+    },
+    {
+      "vbus6": 0,
+      "vbus12": 0,
+      "vbus22": 1,
+      "vbus27": 0
+    }
+  ]
+}

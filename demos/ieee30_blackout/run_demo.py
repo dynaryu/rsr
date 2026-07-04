@@ -60,7 +60,7 @@ sys.path.insert(0, str(HERE.parents[1]))
 
 import rsr.rsr as rsr  # noqa: E402
 
-DEFAULT_DATASET = Path.home() / "Projects/network-datasets/datasets/ieee30/v1"
+DEFAULT_DATASET = HERE.joinpath("../../../network-datasets/datasets/ieee30/v1")
 
 app = typer.Typer(add_completion=False, help=__doc__)
 

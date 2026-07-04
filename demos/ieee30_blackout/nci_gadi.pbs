@@ -38,9 +38,10 @@ echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=
 # Relative stopping rule so this 71-component network terminates in a practical
 # number of rounds; tighten --unk-thres toward 0 for a narrower bound.
 python3 -u run_demo.py \
+    --runs 50 \
     --devices auto \
     --n-workers 48 \
-    --unk-opt rel --unk-thres 0.2 \
+    --unk-opt abs --unk-thres 1.0e-5 \
     --n-sample 10000000 --batch 100000 \
     --out "$RSR_ROOT/demos/ieee30_blackout/out_nci" \
     &> "$PBS_JOBID.log"
