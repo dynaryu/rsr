@@ -2032,6 +2032,7 @@ def run_ref_extraction_by_mcs(
     unk_prob_thres: float = 1e-2,
     unk_prob_opt: str = "rel", # "abs" or "rel"
     max_rounds: int = 10000,     # hard cap on rounds to prevent infinite loops
+    max_refs: int = 0,           # stop once #reference rules (upper+lower) >= this (0 = disabled)
     # Frequencies / sampling settings
     prob_update_every: int = 500,
     save_every: int = 10,
@@ -2082,6 +2083,11 @@ def run_ref_extraction_by_mcs(
         unk_prob_opt: Threshold interpretation — ``"abs"`` (absolute) or
             ``"rel"`` (relative to the previous round).
         max_rounds: Hard cap on the number of rounds.
+        max_refs: Stop once the total number of reference rules
+            (len(refs_upper) + len(refs_lower)) reaches this value.
+            0 (default) disables the check. Evaluated after each round's
+            rule update, so the final count may slightly exceed max_refs
+            (a round adds up to n_workers rules at once).
         prob_update_every: Frequency (in rounds) at which the unknown
             probability is re-estimated.
         save_every: Frequency (in rounds) at which references and
@@ -2514,6 +2520,11 @@ def run_ref_extraction_by_mcs(
 
         if n_round >= max_rounds:
             print(f"Reached maximum rounds ({max_rounds}). Terminating.")
+            break
+
+        if max_refs and (len(refs_mat_upper) + len(refs_mat_lower)) >= max_refs:
+            print(f"Reached max_refs ({max_refs}): "
+                  f"{len(refs_mat_upper)} upper + {len(refs_mat_lower)} lower. Terminating.")
             break
 
     # Final flush of any remaining metrics not yet written by save_every
