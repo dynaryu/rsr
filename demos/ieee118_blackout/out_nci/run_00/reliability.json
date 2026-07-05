@@ -1,0 +1,154 @@
+{
+  "p_blackout": 3e-06,
+  "p_survival": 0.84059,
+  "unknown_gap": 0.159407,
+  "p_blackout_bounds": [
+    3e-06,
+    0.15941
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 13.8,
+  "runtime_sec": 15788.40557217598,
+  "n_survival_rules": 99994,
+  "n_failure_rules": 38,
+  "n_cutsets": 38,
+  "single_points_of_failure": [],
+  "smallest_cutsets": [
+    {
+      "vbus59": 0,
+      "vbus90": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus59": 0,
+      "vbus89": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus49": 0,
+      "vbus54": 1,
+      "vbus59": 0,
+      "vbus92": 0
+    },
+    {
+      "vbus36": 0,
+      "vbus54": 0,
+      "vbus59": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus56": 0,
+      "vbus80": 0,
+      "vbus92": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus42": 0,
+      "vbus59": 0,
+      "vbus88": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus59": 0,
+      "vbus78": 0,
+      "vbus80": 0,
+      "vbus100": 0
+    },
+    {
+      "vbus55": 0,
+      "vbus56": 0,
+      "vbus59": 0,
+      "vbus80": 0
+    },
+    {
+      "vbus27": 0,
+      "vbus37": 0,
+      "vbus54": 0,
+      "vbus59": 0,
+      "vbus94": 0
+    },
+    {
+      "vbus23": 0,
+      "vbus59": 0,
+      "vbus76": 0,
+      "vbus95": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus42": 0,
+      "vbus54": 0,
+      "vbus59": 0,
+      "vbus68": 0,
+      "vbus116": 2
+    },
+    {
+      "vbus34": 0,
+      "vbus59": 0,
+      "vbus68": 0,
+      "vbus89": 0,
+      "vbus90": 2
+    },
+    {
+      "vbus42": 0,
+      "vbus59": 0,
+      "vbus60": 0,
+      "vbus76": 0,
+      "vbus78": 0
+    },
+    {
+      "vbus59": 0,
+      "vbus78": 0,
+      "vbus85": 0,
+      "vbus92": 0,
+      "br155": 0
+    },
+    {
+      "vbus33": 0,
+      "vbus42": 1,
+      "vbus49": 0,
+      "vbus54": 1,
+      "vbus56": 1,
+      "vbus59": 0
+    },
+    {
+      "vbus15": 0,
+      "vbus33": 0,
+      "vbus34": 0,
+      "vbus59": 0,
+      "vbus92": 0,
+      "br16": 0
+    },
+    {
+      "vbus4": 1,
+      "vbus5": 0,
+      "vbus12": 0,
+      "vbus42": 0,
+      "vbus55": 0,
+      "vbus59": 0
+    },
+    {
+      "vbus51": 0,
+      "vbus59": 0,
+      "vbus76": 2,
+      "vbus77": 2,
+      "vbus80": 0,
+      "vbus85": 0
+    },
+    {
+      "vbus4": 1,
+      "vbus5": 0,
+      "vbus6": 1,
+      "vbus12": 1,
+      "vbus59": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus11": 0,
+      "vbus59": 0,
+      "vbus74": 1,
+      "vbus76": 0,
+      "vbus77": 0,
+      "vbus94": 0
+    }
+  ]
+}
