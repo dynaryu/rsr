@@ -41,11 +41,11 @@ echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=
 # gap is reachable, but it may take many rounds. Loosen --unk-thres (or use
 # --unk-opt rel) if you want a quicker bracketed estimate.
 python3 -u run_demo.py \
-    --runs 50 \
+    --runs 5 \
     --devices auto \
     --n-workers 48 \
     --max-refs 100_000 \
     --unk-opt abs --unk-thres 1.0e-5 \
     --n-sample 10000000 --batch 100000 \
-    --out "$RSR_ROOT/demos/ieee118_blackout/out_nci" \
+    --out "$RSR_ROOT/demos/ieee118_blackout/out_nci2" \
     &> "$PBS_JOBID.log"
