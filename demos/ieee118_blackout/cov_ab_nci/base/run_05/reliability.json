@@ -1,0 +1,24 @@
+{
+  "p_blackout": 0.0,
+  "p_survival": 0.2582147,
+  "unknown_gap": 0.7417853,
+  "p_blackout_bounds": [
+    0.0,
+    0.7417853
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 13.8,
+  "runtime_sec": 72.50888776779175,
+  "n_survival_rules": 671,
+  "n_failure_rules": 1,
+  "n_cutsets": 1,
+  "single_points_of_failure": [],
+  "smallest_cutsets": [
+    {
+      "vbus49": 0,
+      "vbus59": 0,
+      "vbus79": 0,
+      "vbus89": 0
+    }
+  ]
+}

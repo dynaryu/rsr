@@ -1,0 +1,17 @@
+{
+  "p_blackout": 0.0,
+  "p_survival": 0.2859848,
+  "unknown_gap": 0.7140152,
+  "p_blackout_bounds": [
+    0.0,
+    0.7140152
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 13.8,
+  "runtime_sec": 494.469224691391,
+  "n_survival_rules": 640,
+  "n_failure_rules": 0,
+  "n_cutsets": 0,
+  "single_points_of_failure": [],
+  "smallest_cutsets": []
+}

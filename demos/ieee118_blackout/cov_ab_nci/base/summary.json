@@ -1,0 +1,140 @@
+{
+  "runs": [
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.23126,
+      "gap": 0.76874,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 71.85760259628296
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.25264,
+      "gap": 0.74736,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 69.65969848632812
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.23941,
+      "gap": 0.76059,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 67.35786867141724
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.23891,
+      "gap": 0.76109,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 69.55186605453491
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.23216,
+      "gap": 0.76784,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 70.61340141296387
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.24589,
+      "gap": 0.75411,
+      "n_surv_rules": 671,
+      "n_fail_rules": 1,
+      "rounds": 14,
+      "runtime_s": 72.50888776779175
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.24962,
+      "gap": 0.75038,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 71.65484952926636
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.22514,
+      "gap": 0.77486,
+      "n_surv_rules": 671,
+      "n_fail_rules": 1,
+      "rounds": 14,
+      "runtime_s": 71.75335359573364
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.23928,
+      "gap": 0.76072,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 67.09042119979858
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.24944,
+      "gap": 0.75056,
+      "n_surv_rules": 672,
+      "n_fail_rules": 0,
+      "rounds": 14,
+      "runtime_s": 68.35436582565308
+    }
+  ],
+  "aggregate": {
+    "P(blackout)": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "cv": 0.0
+    },
+    "bound gap": {
+      "mean": 0.759625,
+      "std": 0.009039670901089251,
+      "min": 0.74736,
+      "max": 0.77486,
+      "cv": 0.011900175614400857
+    },
+    "surv rules": {
+      "mean": 671.8,
+      "std": 0.4216370213557839,
+      "min": 671,
+      "max": 672,
+      "cv": 0.0006276228361949746
+    },
+    "fail rules": {
+      "mean": 0.2,
+      "std": 0.4216370213557839,
+      "min": 0,
+      "max": 1,
+      "cv": 2.1081851067789192
+    },
+    "rounds": {
+      "mean": 14.0,
+      "std": 0.0,
+      "min": 14,
+      "max": 14,
+      "cv": 0.0
+    },
+    "runtime_s": {
+      "mean": 70.04023151397705,
+      "std": 1.9547464831549166,
+      "min": 67.09042119979858,
+      "max": 72.50888776779175,
+      "cv": 0.02790890950674303
+    }
+  },
+  "mean_p_blackout": 0.0,
+  "reference_p_failure": 0.0001
+}
