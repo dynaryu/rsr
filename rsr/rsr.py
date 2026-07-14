@@ -53,7 +53,34 @@ def _minimize_one_unknown(args):
     n_sfun = 1 + int(info.get('attempts', 0))
     return min_comps_st, sys_st, fval, n_sfun
 
-# For use in mixted sorting 
+def _coverage_minimize_worker(args):
+    """Pool worker for coverage-aware Stage-1 candidate generation.
+
+    Runs a single componentwise boundary minimisation for one (seed, order)
+    pair. The seed's system state (hence ``side``) is decided once in the
+    parent and passed in, so the worker only pays for the minimisation itself.
+    Accesses the same module-level ``_MP_*`` globals as
+    :func:`_minimize_one_unknown` (fork-inherited sfun).
+
+    ``args`` = ``(seed_state, side, perm_seed)``.
+    Returns ``(side, ref_dict, n_sfun_attempts)``.
+    """
+    seed_state, side, perm_seed = args
+    sfun = _MP_SFUN
+    sys_upper_st = _MP_SYS_UPPER_ST
+    n_state = _MP_N_STATE
+
+    if side == "upper":
+        ref, info = minimise_upper_states_random(
+            seed_state, sfun, sys_upper_st=sys_upper_st, fval=None, seed=perm_seed)
+    else:
+        ref, info = minimise_lower_states_random(
+            seed_state, sfun, max_state=n_state - 1,
+            sys_lower_st=sys_upper_st - 1, fval=None, seed=perm_seed)
+    return side, ref, int(info.get("attempts", 0))
+
+
+# For use in mixted sorting
 try:
     import numpy as np
     _NUMPY_NUM = (np.integer, np.floating)
@@ -2362,7 +2389,8 @@ def run_ref_extraction_by_mcs(
             ca = coverage_aware_round(
                 samples=samples, idx_unknown=idx_unknown, sfun=sfun,
                 row_names=row_names, n_state=n_state, sys_upper_st=sys_upper_st,
-                n_seeds=ca_n_seeds, n_orders=ca_n_orders, max_add=ca_max_add)
+                n_seeds=ca_n_seeds, n_orders=ca_n_orders, max_add=ca_max_add,
+                pool=_pool)
             _t_minimize = time.perf_counter() - _ts
             n_sfun_upper += ca["n_sfun_upper"]
             n_sfun_lower += ca["n_sfun_lower"]

@@ -41,6 +41,7 @@ from .rsr import (
     minimise_lower_states_random,
     from_ref_dict_to_mat,
     _check_any_subset,
+    _coverage_minimize_worker,
 )
 
 
@@ -74,48 +75,6 @@ def _ref_coverage_mask(
     return _check_any_subset(unknown_flat, not_ref)
 
 
-def _candidates_from_seed(
-    seed_state: Dict[str, int],
-    sfun: Callable,
-    *,
-    side: str,           # "upper" or "lower"
-    sys_upper_st: int,
-    n_state: int,
-    n_orders: int,
-    base_seed: int,
-) -> Tuple[List[Dict[str, Any]], int]:
-    """Produce up to ``n_orders`` distinct boundary references from one seed.
-
-    Reruns the *existing* per-component binary-search minimiser under
-    different random coordinate orders. Because component visitation order
-    changes which local boundary is reached, distinct orders can yield
-    reference states of very different coverage (this is exactly the
-    global-vs-coordinatewise-local gap raised in Comment 3.1).
-
-    Returns the list of candidate reference dicts and the total number of
-    ``sfun`` evaluations consumed (for honest cost accounting in the A/B test).
-    """
-    cands: List[Dict[str, Any]] = []
-    seen: set = set()
-    n_sfun = 0
-    for j in range(max(1, n_orders)):
-        if side == "upper":
-            ref, info = minimise_upper_states_random(
-                seed_state, sfun, sys_upper_st=sys_upper_st,
-                fval=None, seed=base_seed + j)
-        else:
-            ref, info = minimise_lower_states_random(
-                seed_state, sfun, max_state=n_state - 1,
-                sys_lower_st=sys_upper_st - 1, fval=None, seed=base_seed + j)
-        n_sfun += 1 + int(info.get("attempts", 0))
-        # de-duplicate identical boundary states across orders
-        key = tuple(sorted((k, op, s) for k, (op, s) in ref.items()))
-        if key not in seen:
-            seen.add(key)
-            cands.append(ref)
-    return cands, n_sfun
-
-
 def coverage_aware_round(
     *,
     samples: torch.Tensor,          # (B, n_var, n_state) one-hot batch
@@ -128,6 +87,7 @@ def coverage_aware_round(
     n_orders: int = 4,              # coordinate orders tried per seed
     max_add: int = 4,               # references committed per round (greedy)
     generator: Optional[torch.Generator] = None,
+    pool: Optional[Any] = None,     # multiprocessing pool for candidate generation
 ) -> Dict[str, Any]:
     """One coverage-aware Stage-1 round.
 
@@ -137,10 +97,18 @@ def coverage_aware_round(
     boundary they yield, it:
 
       1. samples ``n_seeds`` unclassified seeds,
-      2. builds up to ``n_orders`` candidate boundary references per seed,
+      2. builds up to ``n_orders`` candidate boundary references per seed
+         (one minimisation per (seed, order); farmed out to ``pool`` when given,
+         since the candidate minimisations are independent),
       3. greedily commits the candidates with the largest *marginal* coverage
          over the round's still-uncovered unclassified samples, up to
          ``max_add``.
+
+    ``pool`` is an optional ``multiprocessing`` pool whose workers have the
+    system function set as a fork-inherited global (as in
+    :func:`rsr.run_ref_extraction_by_mcs`). When ``None``, minimisations run
+    serially using the ``sfun`` passed here. The greedy selection is always
+    serial (it is cheap tensor work).
 
     Returns a dict with ``new_upper`` / ``new_lower`` reference-dict lists to
     feed into ``update_refs_batch``, plus bookkeeping: ``n_sfun_upper``,
@@ -166,20 +134,47 @@ def coverage_aware_round(
     n_pick = min(n_seeds, n_unknown)
     perm = torch.randperm(n_unknown, generator=generator, device=device)[:n_pick]
 
-    # --- generate candidates (side decided by the seed's own system state) ---
-    candidates: List[Tuple[str, Dict[str, Any]]] = []   # (side, ref_dict)
+    # --- decide each seed's side (one sfun call per seed, done here) and build
+    #     one minimisation task per (seed, coordinate order). The tasks are
+    #     independent, so they are farmed out to the worker pool when available;
+    #     only the cheap greedy selection below stays serial. ---
+    tasks: List[Tuple[Dict[str, int], str, int]] = []
     for rank, p in enumerate(perm.tolist()):
         s0 = unknown_samples[p]
         seed_state = {row_names[k]: int(v)
                       for k, v in enumerate(torch.argmax(s0, dim=1).tolist())}
-        fval, sys_st, _ = sfun(seed_state)
+        _fval, sys_st, _ = sfun(seed_state)
         side = "upper" if sys_st >= sys_upper_st else "lower"
-        cands, n_sfun = _candidates_from_seed(
-            seed_state, sfun, side=side, sys_upper_st=sys_upper_st,
-            n_state=n_state, n_orders=n_orders, base_seed=rank * 1_000)
-        out[f"n_sfun_{side}"] += 1 + n_sfun   # +1 for the seed sfun call above
-        for c in cands:
-            candidates.append((side, c))
+        out[f"n_sfun_{side}"] += 1          # the seed sfun call above
+        for j in range(max(1, n_orders)):
+            tasks.append((seed_state, side, rank * 1_000 + j))
+
+    if pool is not None:
+        # workers read the fork-inherited _MP_* globals (sfun set at pool creation)
+        results = pool.map(_coverage_minimize_worker, tasks)
+    else:
+        # serial fallback: use the sfun passed to this call (no _MP_* globals)
+        def _run(task):
+            seed_state, side, perm_seed = task
+            if side == "upper":
+                ref, info = minimise_upper_states_random(
+                    seed_state, sfun, sys_upper_st=sys_upper_st, fval=None, seed=perm_seed)
+            else:
+                ref, info = minimise_lower_states_random(
+                    seed_state, sfun, max_state=n_state - 1,
+                    sys_lower_st=sys_upper_st - 1, fval=None, seed=perm_seed)
+            return side, ref, int(info.get("attempts", 0))
+        results = [_run(t) for t in tasks]
+
+    # --- collect candidates and account for minimisation cost ---
+    candidates: List[Tuple[str, Dict[str, Any]]] = []   # (side, ref_dict)
+    seen: set = set()
+    for side, ref, attempts in results:
+        out[f"n_sfun_{side}"] += 1 + attempts   # +1 keeps parity with the serial accounting
+        key = tuple(sorted((k, op, s) for k, (op, s) in ref.items()))
+        if key not in seen:                     # drop duplicate boundaries across orders/seeds
+            seen.add(key)
+            candidates.append((side, ref))
 
     if not candidates:
         return out
