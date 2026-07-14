@@ -72,18 +72,21 @@ def load_runs(variant_dir: Path) -> List[List[Dict]]:
 def run_curves(rounds: List[Dict]) -> Dict[str, np.ndarray]:
     """Extract monotone cost axes and p_unknown for one run.
 
-    n_sfun_upper/lower are per-round counts -> cumulative sum gives the running
-    total sfun budget. n_refs_upper/lower are already absolute (running) counts.
-    p_unknown is the round's unclassified-probability estimate.
+    n_sfun_upper/lower and time_sec are per-round -> cumulative sum gives the
+    running total sfun budget / wall-clock. n_refs_upper/lower are already
+    absolute (running) counts. p_unknown is the round's estimate.
     """
     sfun_round = np.array([r.get("n_sfun_upper", 0) + r.get("n_sfun_lower", 0)
                            for r in rounds], dtype=float)
     cum_sfun = np.cumsum(sfun_round)
+    time_round = np.array([r.get("time_sec", 0.0) for r in rounds], dtype=float)
+    cum_min = np.cumsum(time_round) / 60.0     # cumulative wall-clock, minutes
     n_refs = np.array([r.get("n_refs_upper", 0) + r.get("n_refs_lower", 0)
                        for r in rounds], dtype=float)
     p_unk = np.array([r.get("p_unknown", np.nan) for r in rounds], dtype=float)
     p_unk = np.where(p_unk > 0, p_unk, FLOOR)
-    return {"cum_sfun": cum_sfun, "n_refs": n_refs, "p_unknown": p_unk}
+    return {"cum_sfun": cum_sfun, "cum_min": cum_min, "n_refs": n_refs,
+            "p_unknown": p_unk}
 
 
 def median_band(runs: List[List[Dict]], xkey: str, n_grid: int = 200):
@@ -178,9 +181,10 @@ def main():
         variants.append({"label": label, "runs": runs,
                          "style": PALETTE[i % len(PALETTE)]})
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
-    draw_panel(ax1, variants, "cum_sfun", "Cumulative system-function calls")
-    draw_panel(ax2, variants, "n_refs", "Number of reference states")
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 4.2))
+    draw_panel(ax1, variants, "cum_min", "Cumulative wall-clock time (minutes)")
+    draw_panel(ax2, variants, "cum_sfun", "Cumulative system-function calls")
+    draw_panel(ax3, variants, "n_refs", "Number of reference states")
     ax1.set_ylabel(r"Unclassified probability  $p^{\,u}$")
     ax1.legend(frameon=False, fontsize=9, loc="lower left")
     fig.suptitle(args.title, fontsize=11, y=1.0)
