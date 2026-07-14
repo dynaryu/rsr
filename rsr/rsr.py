@@ -2040,6 +2040,11 @@ def run_ref_extraction_by_mcs(
     sample_batch_size: int = 100_000,
     max_search_loops: int = 0,  # max batches per round for searching unknowns (0 = use n_sample // sample_batch_size)
     min_ref_search: bool = True,
+    # Coverage-aware Stage-1 variant (Reviewer 3, Comments 3.1/3.2)
+    coverage_aware: bool = False,
+    ca_n_seeds: int = 8,     # unclassified seeds examined per round
+    ca_n_orders: int = 4,    # coordinate orders tried per seed
+    ca_max_add: int = 4,     # references committed per round (greedy)
     ref_update_verbose: bool = True,
     # Parallelism
     n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
@@ -2349,7 +2354,33 @@ def run_ref_extraction_by_mcs(
         idx_unknown = res['idx_unknown']
 
         _ts = time.perf_counter()
-        if _pool is not None and min_ref_search:
+        if coverage_aware:
+            # ---- Coverage-aware Stage-1 (Reviewer 3, Comments 3.1/3.2) ----
+            # Try several coordinate orders per seed and greedily commit the
+            # references that cover the most still-unclassified samples.
+            from .coverage_search import coverage_aware_round
+            ca = coverage_aware_round(
+                samples=samples, idx_unknown=idx_unknown, sfun=sfun,
+                row_names=row_names, n_state=n_state, sys_upper_st=sys_upper_st,
+                n_seeds=ca_n_seeds, n_orders=ca_n_orders, max_add=ca_max_add)
+            _t_minimize = time.perf_counter() - _ts
+            n_sfun_upper += ca["n_sfun_upper"]
+            n_sfun_lower += ca["n_sfun_lower"]
+
+            _ts = time.perf_counter()
+            if ca["new_upper"]:
+                refs_upper, refs_mat_upper, n_add, n_rem = update_refs_batch(
+                    ca["new_upper"], refs_upper, refs_mat_upper, row_names, verbose=ref_update_verbose)
+                print(f"Survival: {n_add} refs added, {n_rem} removed (from {len(ca['new_upper'])} candidates)")
+            if ca["new_lower"]:
+                refs_lower, refs_mat_lower, n_add, n_rem = update_refs_batch(
+                    ca["new_lower"], refs_lower, refs_mat_lower, row_names, verbose=ref_update_verbose)
+                print(f"Failure: {n_add} refs added, {n_rem} removed (from {len(ca['new_lower'])} candidates)")
+            print(f"Coverage-aware round: {ca['covered']}/{ca['n_unknown']} unclassified samples "
+                  f"covered by {len(ca['new_upper']) + len(ca['new_lower'])} new refs")
+            _t_refs = time.perf_counter() - _ts
+
+        elif _pool is not None and min_ref_search:
             # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
             n_pick = min(n_workers, len(idx_unknown))
             perm = torch.randperm(len(idx_unknown))[:n_pick]
