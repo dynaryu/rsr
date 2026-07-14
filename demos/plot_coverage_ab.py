@@ -37,15 +37,16 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# Okabe-Ito blue / vermillion — CVD-safe, validated against a white surface.
-# Series identity is also carried by marker shape + a direct end-label, so the
-# distinction never rests on colour alone.
-# `dy` staggers the direct end-label vertically so the two series never
-# overprint when they terminate at the same point (both hit the p^u floor).
-STYLE = {
-    "baseline":       dict(color="#0072B2", marker="o", label="Baseline", dy=7),
-    "coverage-aware": dict(color="#D55E00", marker="s", label="Coverage-aware", dy=-9),
-}
+# Okabe-Ito blue / vermillion / bluish-green / purple — CVD-safe, validated
+# against a white surface. Series identity is also carried by marker shape + a
+# direct end-label, so the distinction never rests on colour alone. `dy`
+# staggers the end-labels so variants ending at the same point never overprint.
+PALETTE = [
+    dict(color="#0072B2", marker="o", dy=7),
+    dict(color="#D55E00", marker="s", dy=-9),
+    dict(color="#009E73", marker="^", dy=17),
+    dict(color="#CC79A7", marker="D", dy=-19),
+]
 FLOOR = 1e-12   # p_unknown reported as 0 (fully classified) is plotted at this floor
 
 
@@ -111,9 +112,11 @@ def median_band(runs: List[List[Dict]], xkey: str, n_grid: int = 200):
     return grid, 10 ** np.median(logy, 0), 10 ** logy.min(0), 10 ** logy.max(0)
 
 
-def draw_panel(ax, variants: Dict[str, List[List[Dict]]], xkey: str, xlabel: str):
-    for name, runs in variants.items():
-        st = STYLE[name]
+def draw_panel(ax, variants: List[Dict], xkey: str, xlabel: str):
+    """variants: ordered list of dicts with keys label, runs, and a style
+    (color/marker/dy) taken from PALETTE by position."""
+    for v in variants:
+        st, runs, label = v["style"], v["runs"], v["label"]
         # thin per-run traces for honesty about run-to-run spread
         for r in runs:
             c = run_curves(r)
@@ -124,18 +127,17 @@ def draw_panel(ax, variants: Dict[str, List[List[Dict]]], xkey: str, xlabel: str
             grid, med, lo, hi = band
             ax.fill_between(grid, lo, hi, color=st["color"], alpha=0.12, lw=0, zorder=2)
             ax.plot(grid, med, color=st["color"], lw=2.0, marker=st["marker"],
-                    markevery=[-1], ms=7, zorder=3, label=st["label"])
-            ax.annotate(st["label"], (grid[-1], med[-1]), color=st["color"],
-                        fontsize=8, fontweight="bold", xytext=(4, st["dy"]),
-                        textcoords="offset points", va="center")
+                    markevery=[-1], ms=7, zorder=3, label=label)
+            xend, yend = grid[-1], med[-1]
         else:
             c = run_curves(runs[0])
             ax.plot(np.maximum(c[xkey], FLOOR), c["p_unknown"], color=st["color"],
                     lw=2.0, marker=st["marker"], markevery=[-1], ms=7,
-                    zorder=3, label=st["label"])
-            ax.annotate(st["label"], (max(c[xkey][-1], FLOOR), c["p_unknown"][-1]),
-                        color=st["color"], fontsize=8, fontweight="bold",
-                        xytext=(4, st["dy"]), textcoords="offset points", va="center")
+                    zorder=3, label=label)
+            xend, yend = max(c[xkey][-1], FLOOR), c["p_unknown"][-1]
+        ax.annotate(label, (xend, yend), color=st["color"], fontsize=8,
+                    fontweight="bold", xytext=(4, st["dy"]),
+                    textcoords="offset points", va="center")
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel(xlabel)
@@ -147,18 +149,34 @@ def draw_panel(ax, variants: Dict[str, List[List[Dict]]], xkey: str, xlabel: str
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", required=True, type=Path, help="baseline output dir")
-    ap.add_argument("--cov", required=True, type=Path, help="coverage-aware output dir")
+    ap.add_argument("--base", type=Path, help="baseline output dir (labelled 'Baseline')")
+    ap.add_argument("--cov", type=Path, help="coverage-aware output dir (labelled 'Coverage-aware')")
+    ap.add_argument("--variant", action="append", default=[], metavar="LABEL=DIR",
+                    help="extra variant as 'Label=path'; repeatable. Order sets colour.")
     ap.add_argument("--out", type=Path, default=Path("coverage_ab.png"))
     ap.add_argument("--title", default="RSR convergence: baseline vs. coverage-aware")
     args = ap.parse_args()
 
-    variants = {
-        "baseline": load_runs(args.base),
-        "coverage-aware": load_runs(args.cov),
-    }
-    for name, runs in variants.items():
-        print(f"{name}: {len(runs)} run(s)")
+    # Assemble ordered (label, dir) list from the convenience flags + --variant.
+    spec: List[tuple] = []
+    if args.base is not None:
+        spec.append(("Baseline", args.base))
+    if args.cov is not None:
+        spec.append(("Coverage-aware", args.cov))
+    for item in args.variant:
+        if "=" not in item:
+            ap.error(f"--variant must be LABEL=DIR, got {item!r}")
+        label, _, d = item.rpartition("=")   # split on last '=' (labels may contain '=')
+        spec.append((label, Path(d)))
+    if not spec:
+        ap.error("provide at least one of --base / --cov / --variant")
+
+    variants = []
+    for i, (label, d) in enumerate(spec):
+        runs = load_runs(d)
+        print(f"{label}: {len(runs)} run(s)  <- {d}")
+        variants.append({"label": label, "runs": runs,
+                         "style": PALETTE[i % len(PALETTE)]})
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
     draw_panel(ax1, variants, "cum_sfun", "Cumulative system-function calls")

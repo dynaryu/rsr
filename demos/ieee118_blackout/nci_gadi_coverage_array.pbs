@@ -1,0 +1,55 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS ARRAY job: coverage-aware A/B on IEEE-118 without any code change.
+# Runs the coverage-aware variants as 10 concurrent single-run subjobs each, so
+# no single subjob exceeds walltime even with the serial coverage_aware_round.
+#
+# Submit both variants:
+#   qsub -v VAR=cov_n4 nci_gadi_coverage_array.pbs
+#   qsub -v VAR=cov_n1 nci_gadi_coverage_array.pbs
+# The baseline is cheap; run it once with --runs 10 (see nci_gadi_coverage_ab.pbs
+# section 1) rather than as an array.
+#
+# Each subjob writes run_0${PBS_ARRAY_INDEX}/ under the variant's out dir, which
+# is exactly the layout plot_coverage_ab.py expects (run_*/metrics.json).
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m ae
+#PBS -P n74
+#PBS -q gpuvolta
+#PBS -l walltime=6:00:00
+#PBS -l ngpus=1
+#PBS -l ncpus=12
+#PBS -l mem=95GB
+#PBS -l jobfs=12GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -l other=hyperthread
+#PBS -N rsr118_cov_arr
+#PBS -J 0-9
+
+module load python3/3.12.1
+module load cuda
+source /g/data/n74/hxr547/tsum/.venv/bin/activate
+
+RSR_ROOT=/scratch/n74/hxr547/rsr
+cd "$RSR_ROOT/demos/ieee118_blackout"
+
+: "${VAR:?set VAR=cov_n1 or VAR=cov_n4 via  qsub -v VAR=...}"
+if [ "$VAR" = "cov_n4" ]; then ORDERS=4; elif [ "$VAR" = "cov_n1" ]; then ORDERS=1; else
+    echo "VAR must be cov_n1 or cov_n4"; exit 1; fi
+
+OUT="$RSR_ROOT/demos/ieee118_blackout/cov_ab_nci/$VAR"
+RUN_DIR="$OUT/run_$(printf '%02d' "$PBS_ARRAY_INDEX")"
+mkdir -p "$RUN_DIR"
+
+echo "Job $PBS_JOBID[$PBS_ARRAY_INDEX] VAR=$VAR orders=$ORDERS on $(hostname)"
+
+# --runs 1 -> writes metrics.json directly into RUN_DIR (the run_NN folder),
+# giving the run_*/metrics.json layout the plotter reads across the 10 subjobs.
+python3 -u run_demo.py \
+    --runs 1 --devices auto --n-workers 12 \
+    --coverage-aware --ca-n-orders $ORDERS --ca-n-seeds 8 --ca-max-add 4 \
+    --max-refs 640 --batch 100000 --n-sample 10000000 \
+    --unk-opt abs --unk-thres 1.0e-6 \
+    --out "$RUN_DIR" &> "$OUT/${PBS_JOBID%.*}.$PBS_ARRAY_INDEX.log"
