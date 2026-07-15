@@ -106,7 +106,7 @@ def build_model(dataset, device, threshold, alpha):
 
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             max_search_loops, max_rounds, max_refs, n_sample, batch, multi_devices, n_workers, quiet,
-            coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4):
+            coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0):
     """Run one RSR rule extraction into `out`. Returns (res, wall_seconds).
 
     `multi_devices` (list of GPUs) parallelises the sampling/classification;
@@ -130,6 +130,7 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             devices=multi_devices, n_workers=n_workers, output_dir=str(out),
             coverage_aware=coverage_aware,
             ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
+            ca_failure_beta=ca_failure_beta,
         )
 
     t0 = time.time()
@@ -380,7 +381,7 @@ def resolve_workers(n_workers: int):
 # ----------------------------------------------------------------------------
 def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
         max_search_loops, max_rounds, max_refs, n_sample, batch, device, devices, n_workers, out, verbose, runs,
-        coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4):
+        coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0):
     """Full demo run: single detailed report (runs<=1) or multi-run summary."""
     dev, multi_devices, _ = resolve_devices(device, devices)
     n_workers = resolve_workers(n_workers)
@@ -399,7 +400,8 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
                   max_rounds=max_rounds, max_refs=max_refs,
                   n_sample=n_sample, batch=batch, multi_devices=multi_devices,
                   n_workers=n_workers, coverage_aware=coverage_aware,
-                  ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add)
+                  ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
+                  ca_failure_beta=ca_failure_beta)
 
     if runs <= 1:
         # ---- single run: full report ----
@@ -468,6 +470,7 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
         ca_n_seeds: int = typer.Option(8, help="Coverage-aware: unclassified seeds examined per round"),
         ca_n_orders: int = typer.Option(4, help="Coverage-aware: coordinate orders tried per seed (set 1 to isolate greedy multi-seed selection at ~baseline cost)"),
         ca_max_add: int = typer.Option(4, help="Coverage-aware: references committed per round (greedy)"),
+        ca_failure_beta: float = typer.Option(0.0, help="Coverage-aware: >0 biases seeds+coverage toward the failure boundary (try 2-5); 0 = uniform/mass-optimal"),
     ):
         """Estimate P(blackout) and the critical failure modes for this grid."""
         run(title=title, ref_pf=ref_pf, dataset=dataset, threshold=threshold, alpha=alpha,
@@ -475,6 +478,7 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
             max_rounds=max_rounds, max_refs=max_refs, n_sample=n_sample,
             batch=batch, device=device, devices=devices, n_workers=n_workers, out=out,
             verbose=verbose, runs=runs, coverage_aware=coverage_aware,
-            ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add)
+            ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
+            ca_failure_beta=ca_failure_beta)
 
     return app

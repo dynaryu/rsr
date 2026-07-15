@@ -89,6 +89,7 @@ def coverage_aware_round(
     generator: Optional[torch.Generator] = None,
     pool: Optional[Any] = None,     # multiprocessing pool for candidate generation
     exempt_lower: bool = True,      # always keep failure refs (bypass coverage filter)
+    failure_beta: float = 0.0,      # >0 biases seeds + coverage toward degraded states
 ) -> Dict[str, Any]:
     """One coverage-aware Stage-1 round.
 
@@ -120,6 +121,17 @@ def coverage_aware_round(
     survival side. Set ``False`` to let both sides compete on coverage (the
     original behaviour, useful for ablation).
 
+    ``failure_beta`` (default ``0`` = off) biases the search toward the failure
+    boundary, where the hard residual unclassified mass concentrates. Each
+    unclassified sample gets a weight ``exp(failure_beta * d)`` where ``d`` is its
+    normalised degradation (distance of its component states from the healthiest
+    state, in ``[0, 1]``; valid because RSR assumes a coherent/monotone system).
+    The weight scales both the seed draw (degraded states are seeded more often)
+    and the greedy coverage score (a reference covering more-degraded samples is
+    preferred). ``failure_beta = 0`` recovers the uniform, mass-optimal behaviour
+    exactly. Larger values trade raw unclassified-mass reduction for faster
+    coverage of the failure-proximal region.
+
     Returns a dict with ``new_upper`` / ``new_lower`` reference-dict lists to
     feed into ``update_refs_batch``, plus bookkeeping: ``n_sfun_upper``,
     ``n_sfun_lower``, ``covered`` (unclassified samples in this batch newly
@@ -140,9 +152,23 @@ def coverage_aware_round(
     unknown_samples = samples[idx_unknown]                       # (nu, n_var, n_state)
     unknown_flat = unknown_samples.reshape(n_unknown, -1).to(dtype=torch.float16)
 
-    # --- pick seeds from the unclassified pool ---
+    # --- failure-proximity weight per unclassified sample (exp(beta * degradation)) ---
+    # degradation d in [0, 1] = mean distance of component states from the
+    # healthiest state (n_state-1). beta = 0 -> all weights 1 (uniform / mass-optimal).
+    if failure_beta > 0.0:
+        states = unknown_samples.argmax(dim=2)                   # (nu, n_var) state indices
+        deg = (n_state - 1 - states).sum(dim=1).to(torch.float32)
+        d = deg / float(len(row_names) * max(n_state - 1, 1))
+        weight = torch.exp(failure_beta * d)                     # (nu,)
+    else:
+        weight = None
+
+    # --- pick seeds from the unclassified pool (weighted toward degraded if beta>0) ---
     n_pick = min(n_seeds, n_unknown)
-    perm = torch.randperm(n_unknown, generator=generator, device=device)[:n_pick]
+    if weight is not None:
+        perm = torch.multinomial(weight, n_pick, replacement=False, generator=generator)
+    else:
+        perm = torch.randperm(n_unknown, generator=generator, device=device)[:n_pick]
 
     # --- decide each seed's side (one sfun call per seed, done here) and build
     #     one minimisation task per (seed, coordinate order). The tasks are
@@ -211,16 +237,21 @@ def coverage_aware_round(
                 compete.append(ci)
 
     # --- greedy max-marginal-coverage selection over the competing candidates ---
+    # gain is the (optionally failure-weighted) mass of newly-covered samples.
     used: set = set()
     for _ in range(min(max_add, len(compete))):
-        best, best_gain = -1, 0
+        best, best_gain = -1, 0.0
         for ci in compete:
             if ci in used:
                 continue
-            gain = int((masks[ci] & remaining).sum().item())
+            newly = masks[ci] & remaining
+            if weight is None:
+                gain = float(newly.sum().item())
+            else:
+                gain = float((newly.to(weight.dtype) * weight).sum().item())
             if gain > best_gain:
                 best_gain, best = gain, ci
-        if best < 0 or best_gain == 0:
+        if best < 0 or best_gain <= 0.0:
             break                       # nothing left to cover -> stop early
         used.add(best)
         remaining &= ~masks[best]

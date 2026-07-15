@@ -2072,6 +2072,7 @@ def run_ref_extraction_by_mcs(
     ca_n_seeds: int = 8,     # unclassified seeds examined per round
     ca_n_orders: int = 4,    # coordinate orders tried per seed
     ca_max_add: int = 4,     # references committed per round (greedy)
+    ca_failure_beta: float = 0.0,  # >0 biases coverage-aware toward the failure boundary
     ref_update_verbose: bool = True,
     # Parallelism
     n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
@@ -2390,7 +2391,7 @@ def run_ref_extraction_by_mcs(
                 samples=samples, idx_unknown=idx_unknown, sfun=sfun,
                 row_names=row_names, n_state=n_state, sys_upper_st=sys_upper_st,
                 n_seeds=ca_n_seeds, n_orders=ca_n_orders, max_add=ca_max_add,
-                pool=_pool)
+                failure_beta=ca_failure_beta, pool=_pool)
             _t_minimize = time.perf_counter() - _ts
             n_sfun_upper += ca["n_sfun_upper"]
             n_sfun_lower += ca["n_sfun_lower"]
