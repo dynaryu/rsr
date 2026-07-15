@@ -1,0 +1,376 @@
+================================================================
+RSR demo — IEEE 118-bus DC-OPF blackout reliability
+================================================================
+  Resources:   GPUs=cuda:0,cuda:1  CPU workers=48  (visible: 2 GPU, 24 CPU)
+  Dataset:     /scratch/n74/hxr547/rsr/demos/ieee118_blackout/../../../network-datasets/datasets/ieee118/v1
+  Components:  304 (54 generator buses, 64 ordinary buses, 186 branches)
+  Max states:  4   Device: cuda:0
+  Threshold:   13.8% blackout → system failure
+DC-OPF sfun ready: 118 buses, 54 generators, 186 branches
+  All operational: blackout=  0.00%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+
+Extracting survival / failure rules (unknown gap < 1e-06 [abs])...
+
+Parallel mode: 48 CPU workers for sfun + minimization
+Multi-GPU mode: sampling across ['cuda:0', 'cuda:1']
+---
+Round: 1, Unk. prob.: 1.000e+00
+Upper probs: 0.000e+00, Lower probs: 0.000e+00
+No. of non-dominant refs: 0, Survival refs: 0, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 14526/100000 unclassified samples covered by 48 new refs
+---
+Round: 2, Unk. prob.: 1.000e+00
+Upper probs: 0.000e+00, Lower probs: 0.000e+00
+No. of non-dominant refs: 48, Survival refs: 48, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 6062/85690 unclassified samples covered by 48 new refs
+---
+Round: 3, Unk. prob.: 8.569e-01
+Upper probs: 1.431e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 96, Survival refs: 96, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 4120/79715 unclassified samples covered by 48 new refs
+---
+Round: 4, Unk. prob.: 7.972e-01
+Upper probs: 2.029e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 144, Survival refs: 144, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 3212/75482 unclassified samples covered by 48 new refs
+---
+Round: 5, Unk. prob.: 7.548e-01
+Upper probs: 2.452e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 192, Survival refs: 192, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 3013/72410 unclassified samples covered by 48 new refs
+---
+Round: 6, Unk. prob.: 7.241e-01
+Upper probs: 2.759e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 240, Survival refs: 240, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 2916/69799 unclassified samples covered by 48 new refs
+---
+Round: 7, Unk. prob.: 6.980e-01
+Upper probs: 3.020e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 288, Survival refs: 288, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 2309/66696 unclassified samples covered by 48 new refs
+---
+Round: 8, Unk. prob.: 6.670e-01
+Upper probs: 3.330e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 336, Survival refs: 336, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1864/64702 unclassified samples covered by 48 new refs
+---
+Round: 9, Unk. prob.: 6.470e-01
+Upper probs: 3.530e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 384, Survival refs: 384, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1979/62877 unclassified samples covered by 48 new refs
+---
+Round: 10, Unk. prob.: 6.288e-01
+Upper probs: 3.712e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 432, Survival refs: 432, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 2095/60865 unclassified samples covered by 48 new refs
+---
+Round: 11, Unk. prob.: 6.087e-01
+Upper probs: 3.913e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 480, Survival refs: 480, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1109/58860 unclassified samples covered by 48 new refs
+---
+Round: 12, Unk. prob.: 5.886e-01
+Upper probs: 4.114e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 528, Survival refs: 528, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1042/57902 unclassified samples covered by 48 new refs
+---
+Round: 13, Unk. prob.: 5.790e-01
+Upper probs: 4.210e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 576, Survival refs: 576, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1031/57041 unclassified samples covered by 48 new refs
+---
+Round: 14, Unk. prob.: 5.704e-01
+Upper probs: 4.296e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 624, Survival refs: 624, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 1208/56021 unclassified samples covered by 48 new refs
+---
+Round: 15, Unk. prob.: 5.602e-01
+Upper probs: 4.398e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 672, Survival refs: 672, Failure refs: 0
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Batch update: 2 refs added, 0 existing refs removed (0 new refs dominated)
+Failure: 2 refs added, 0 removed (from 2 candidates)
+Coverage-aware round: 1279/54895 unclassified samples covered by 50 new refs
+---
+Round: 16, Unk. prob.: 5.490e-01
+Upper probs: 4.511e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 722, Survival refs: 720, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 806/53593 unclassified samples covered by 48 new refs
+---
+Round: 17, Unk. prob.: 5.359e-01
+Upper probs: 4.641e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 770, Survival refs: 768, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 823/52866 unclassified samples covered by 48 new refs
+---
+Round: 18, Unk. prob.: 5.287e-01
+Upper probs: 4.713e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 818, Survival refs: 816, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 831/51948 unclassified samples covered by 48 new refs
+---
+Round: 19, Unk. prob.: 5.195e-01
+Upper probs: 4.805e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 866, Survival refs: 864, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 636/51239 unclassified samples covered by 48 new refs
+---
+Round: 20, Unk. prob.: 5.124e-01
+Upper probs: 4.876e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 914, Survival refs: 912, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 741/50973 unclassified samples covered by 48 new refs
+---
+Round: 21, Unk. prob.: 5.097e-01
+Upper probs: 4.903e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 962, Survival refs: 960, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 944/50126 unclassified samples covered by 48 new refs
+---
+Round: 22, Unk. prob.: 5.013e-01
+Upper probs: 4.987e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1010, Survival refs: 1008, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 765/49433 unclassified samples covered by 48 new refs
+---
+Round: 23, Unk. prob.: 4.943e-01
+Upper probs: 5.057e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1058, Survival refs: 1056, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 647/48922 unclassified samples covered by 48 new refs
+---
+Round: 24, Unk. prob.: 4.892e-01
+Upper probs: 5.108e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1106, Survival refs: 1104, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 616/48291 unclassified samples covered by 48 new refs
+---
+Round: 25, Unk. prob.: 4.829e-01
+Upper probs: 5.171e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1154, Survival refs: 1152, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 559/48046 unclassified samples covered by 48 new refs
+---
+Round: 26, Unk. prob.: 4.805e-01
+Upper probs: 5.195e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1202, Survival refs: 1200, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 799/47309 unclassified samples covered by 48 new refs
+---
+Round: 27, Unk. prob.: 4.731e-01
+Upper probs: 5.269e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1250, Survival refs: 1248, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 523/46678 unclassified samples covered by 48 new refs
+---
+Round: 28, Unk. prob.: 4.668e-01
+Upper probs: 5.332e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1298, Survival refs: 1296, Failure refs: 2
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Batch update: 3 refs added, 0 existing refs removed (0 new refs dominated)
+Failure: 3 refs added, 0 removed (from 3 candidates)
+Coverage-aware round: 642/46049 unclassified samples covered by 51 new refs
+---
+Round: 29, Unk. prob.: 4.605e-01
+Upper probs: 5.395e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1349, Survival refs: 1344, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 661/45613 unclassified samples covered by 48 new refs
+---
+Round: 30, Unk. prob.: 4.561e-01
+Upper probs: 5.439e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1397, Survival refs: 1392, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 446/44806 unclassified samples covered by 48 new refs
+---
+Round: 31, Unk. prob.: 4.481e-01
+Upper probs: 5.519e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1445, Survival refs: 1440, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 614/44532 unclassified samples covered by 48 new refs
+---
+Round: 32, Unk. prob.: 4.453e-01
+Upper probs: 5.547e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1493, Survival refs: 1488, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 553/43964 unclassified samples covered by 48 new refs
+---
+Round: 33, Unk. prob.: 4.396e-01
+Upper probs: 5.604e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1541, Survival refs: 1536, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 429/43873 unclassified samples covered by 48 new refs
+---
+Round: 34, Unk. prob.: 4.387e-01
+Upper probs: 5.613e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1589, Survival refs: 1584, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 569/43661 unclassified samples covered by 48 new refs
+---
+Round: 35, Unk. prob.: 4.366e-01
+Upper probs: 5.634e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1637, Survival refs: 1632, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 474/42954 unclassified samples covered by 48 new refs
+---
+Round: 36, Unk. prob.: 4.295e-01
+Upper probs: 5.705e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1685, Survival refs: 1680, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 402/42417 unclassified samples covered by 48 new refs
+---
+Round: 37, Unk. prob.: 4.242e-01
+Upper probs: 5.758e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1733, Survival refs: 1728, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 581/42200 unclassified samples covered by 48 new refs
+---
+Round: 38, Unk. prob.: 4.220e-01
+Upper probs: 5.780e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1781, Survival refs: 1776, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 473/41887 unclassified samples covered by 48 new refs
+---
+Round: 39, Unk. prob.: 4.189e-01
+Upper probs: 5.811e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1829, Survival refs: 1824, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 431/41455 unclassified samples covered by 48 new refs
+---
+Round: 40, Unk. prob.: 4.145e-01
+Upper probs: 5.855e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1877, Survival refs: 1872, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 442/40782 unclassified samples covered by 48 new refs
+---
+Round: 41, Unk. prob.: 4.078e-01
+Upper probs: 5.922e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1925, Survival refs: 1920, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 328/40496 unclassified samples covered by 48 new refs
+---
+Round: 42, Unk. prob.: 4.050e-01
+Upper probs: 5.950e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 1973, Survival refs: 1968, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 434/40206 unclassified samples covered by 48 new refs
+---
+Round: 43, Unk. prob.: 4.021e-01
+Upper probs: 5.979e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2021, Survival refs: 2016, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 404/39756 unclassified samples covered by 48 new refs
+---
+Round: 44, Unk. prob.: 3.976e-01
+Upper probs: 6.024e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2069, Survival refs: 2064, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 297/39817 unclassified samples covered by 48 new refs
+---
+Round: 45, Unk. prob.: 3.982e-01
+Upper probs: 6.018e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2117, Survival refs: 2112, Failure refs: 5
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Batch update: 1 refs added, 0 existing refs removed (0 new refs dominated)
+Failure: 1 refs added, 0 removed (from 1 candidates)
+Coverage-aware round: 349/39284 unclassified samples covered by 49 new refs
+---
+Round: 46, Unk. prob.: 3.928e-01
+Upper probs: 6.072e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2166, Survival refs: 2160, Failure refs: 6
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 293/39245 unclassified samples covered by 48 new refs
+---
+Round: 47, Unk. prob.: 3.925e-01
+Upper probs: 6.076e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2214, Survival refs: 2208, Failure refs: 6
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 351/39287 unclassified samples covered by 48 new refs
+---
+Round: 48, Unk. prob.: 3.929e-01
+Upper probs: 6.071e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2262, Survival refs: 2256, Failure refs: 6
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 399/38672 unclassified samples covered by 48 new refs
+---
+Round: 49, Unk. prob.: 3.867e-01
+Upper probs: 6.133e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2310, Survival refs: 2304, Failure refs: 6
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 386/38346 unclassified samples covered by 48 new refs
+---
+Round: 50, Unk. prob.: 3.835e-01
+Upper probs: 6.165e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2358, Survival refs: 2352, Failure refs: 6
+Batch update: 48 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 48 refs added, 0 removed (from 48 candidates)
+Coverage-aware round: 342/38178 unclassified samples covered by 48 new refs
+---
+Round: 51, Unk. prob.: 3.818e-01
+Upper probs: 6.182e-01, Lower probs: 0.000e+00
+No. of non-dominant refs: 2406, Survival refs: 2400, Failure refs: 6

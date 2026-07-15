@@ -1,0 +1,67 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job: coverage-aware A/B experiment on IEEE-118 (Reviewer 3.2).
+# Runs baseline + coverage-aware (n_orders 1 and 4), 10 runs each, to a fixed
+# 640 reference states, for run-to-run error bars matching Table 8.
+#
+# Submit with:  qsub nci_gadi_coverage_ab.pbs
+#
+# NOTE ON WALLTIME: coverage_aware_round currently runs its per-seed
+# minimisations SERIALLY (it does not use the --n-workers pool that the
+# baseline uses). With that, n_orders=4 x 10 runs ~ 25 h and will NOT fit the
+# 24 h cap. Use this single-job script only AFTER coverage_aware_round is
+# parallelised across the worker pool; otherwise use the array script
+# (nci_gadi_coverage_array.pbs) for the coverage-aware variants.
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m ae
+#PBS -P n74
+#PBS -q gpuvolta
+#PBS -l walltime=10:00:00
+#PBS -l ngpus=2
+#PBS -l ncpus=24
+#PBS -l mem=191GB
+#PBS -l jobfs=12GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -l other=hyperthread
+#PBS -N rsr118_cov_ab
+
+module load python3/3.12.1
+module load cuda
+source /g/data/n74/hxr547/tsum/.venv/bin/activate
+
+RSR_ROOT=/scratch/n74/hxr547/rsr
+cd "$RSR_ROOT/demos/ieee118_blackout"
+OUT="$RSR_ROOT/demos/ieee118_blackout/cov_100k"
+mkdir -p "$OUT"
+
+echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=${PBS_NCPUS:-?}"
+
+COMMON="--runs 1 --devices auto --n-workers 48 --max-refs 100_000 \
+        --batch 100000 --n-sample 10000000 --unk-opt abs --unk-thres 1.0e-6"
+
+python3 -u run_demo.py $COMMON --coverage-aware \
+    --ca-n-orders 4 --ca-n-seeds 96 --ca-max-add 48 \
+    --out "$OUT" &> "$PBS_JOBID.cov_100k.log"
+
+
+# 1) Baseline (fast: ~48 refs/round on 48 workers)
+#python3 -u run_demo.py $COMMON \
+#    --out "$OUT/cov_diag/base" &> "$PBS_JOBID.cov_diag_base.log"
+
+# 2) Coverage-aware, selection only (n_orders = 1)
+#python3 -u run_demo.py $COMMON --coverage-aware \
+#    --ca-n-orders 1 --ca-n-seeds 8 --ca-max-add 4 \
+#    --out "$OUT/cov_n1" &> "$PBS_JOBID.cov_n1.log"
+
+# 3) Coverage-aware, full diversity (n_orders = 4)   <-- needs the parallel patch
+#python3 -u run_demo.py $COMMON --coverage-aware \
+#    --ca-n-orders 4 --ca-n-seeds 8 --ca-max-add 4 \
+#    --out "$OUT/cov_n4" &> "$PBS_JOBID.cov_n4.log"
+
+# Post-process locally (or in a login-node session) once done:
+#   python ../plot_coverage_ab.py \
+#       --base cov_ab_nci/base --cov cov_ab_nci/cov_n4 \
+#       --variant "Coverage-aware (n_orders=1)=cov_ab_nci/cov_n1" \
+#       --out ieee118_coverage_summary_nci.png
