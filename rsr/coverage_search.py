@@ -88,6 +88,7 @@ def coverage_aware_round(
     max_add: int = 4,               # references committed per round (greedy)
     generator: Optional[torch.Generator] = None,
     pool: Optional[Any] = None,     # multiprocessing pool for candidate generation
+    exempt_lower: bool = True,      # always keep failure refs (bypass coverage filter)
 ) -> Dict[str, Any]:
     """One coverage-aware Stage-1 round.
 
@@ -109,6 +110,15 @@ def coverage_aware_round(
     :func:`rsr.run_ref_extraction_by_mcs`). When ``None``, minimisations run
     serially using the ``sfun`` passed here. The greedy selection is always
     serial (it is cheap tensor work).
+
+    ``exempt_lower`` (default ``True``) keeps every distinct *failure* (lower)
+    reference regardless of coverage, letting only *survival* (upper) references
+    compete for the ``max_add`` budget. Failure references cover almost none of
+    the survival-dominated unclassified pool, so a pure coverage ranking would
+    always discard them — yet they carry RSR's cut-set / criticality output. The
+    exemption preserves that output while keeping the coverage advantage on the
+    survival side. Set ``False`` to let both sides compete on coverage (the
+    original behaviour, useful for ablation).
 
     Returns a dict with ``new_upper`` / ``new_lower`` reference-dict lists to
     feed into ``update_refs_batch``, plus bookkeeping: ``n_sfun_upper``,
@@ -183,20 +193,36 @@ def coverage_aware_round(
     masks = [_ref_coverage_mask(c, unknown_flat, row_names, n_state)
              for _, c in candidates]
 
-    # --- greedy max-marginal-coverage selection ---
     remaining = torch.ones(n_unknown, dtype=torch.bool, device=device)
-    used = [False] * len(candidates)
-    for _ in range(min(max_add, len(candidates))):
+
+    # --- failure references: retained unconditionally (see exempt_lower) ---
+    # Their (small) coverage is still marked so the survival greedy below and the
+    # `covered` tally do not double-count those samples.
+    compete = list(range(len(candidates)))
+    if exempt_lower:
+        compete = []
+        for ci, (side, ref) in enumerate(candidates):
+            if side == "lower":
+                out["new_lower"].append(ref)
+                remaining &= ~masks[ci]
+                out["trace"].append({"side": "lower", "exempt": True,
+                                     "coverage": int(masks[ci].sum().item())})
+            else:
+                compete.append(ci)
+
+    # --- greedy max-marginal-coverage selection over the competing candidates ---
+    used: set = set()
+    for _ in range(min(max_add, len(compete))):
         best, best_gain = -1, 0
-        for ci, m in enumerate(masks):
-            if used[ci]:
+        for ci in compete:
+            if ci in used:
                 continue
-            gain = int((m & remaining).sum().item())
+            gain = int((masks[ci] & remaining).sum().item())
             if gain > best_gain:
                 best_gain, best = gain, ci
         if best < 0 or best_gain == 0:
             break                       # nothing left to cover -> stop early
-        used[best] = True
+        used.add(best)
         remaining &= ~masks[best]
         side, ref = candidates[best]
         (out["new_upper"] if side == "upper" else out["new_lower"]).append(ref)

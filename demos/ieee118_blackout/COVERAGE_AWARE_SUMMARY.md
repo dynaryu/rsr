@@ -138,6 +138,62 @@ worth in practice.
 
 ---
 
+## Algorithmic lineage (for citation)
+
+The two ingredients are standard combinatorial-optimisation heuristics; we cite
+them as the lineage of the method, not as an optimality proof for RSR.
+
+- **Greedy batch selection = greedy maximum coverage.** Each round we add the
+  batch of reference states that most reduces the unclassified sample pool,
+  chosen by largest *marginal* coverage. Pool coverage is a monotone submodular
+  set function, so this is the classical greedy max-(k-)cover heuristic, which
+  attains a `(1 − 1/e) ≈ 0.63` fraction of the optimal batch coverage
+  (Nemhauser, Wolsey & Fisher 1978; Feige 1998); see Krause & Golovin (2014)
+  for a tutorial treatment.
+- **Multiple coordinate orders, keep the best = randomized-greedy multi-start.**
+  Generating candidate boundaries by re-running the componentwise greedy
+  minimiser under different random component orderings and retaining the
+  highest-coverage one is a randomized-greedy construction in the spirit of
+  GRASP (Feo & Resende 1995).
+
+**Scope of the guarantee.** The `(1 − 1/e)` bound applies to a *single round's*
+batch selection from a *fixed* candidate pool, evaluated on the *Monte-Carlo*
+unclassified sample (i.e. a sampled, probability-weighted max-coverage). It is
+not a statement about the full multi-round loop or the true probability mass —
+it explains why the per-round selection is sound, nothing more.
+
+```bibtex
+@article{nemhauser1978,
+  author  = {Nemhauser, G. L. and Wolsey, L. A. and Fisher, M. L.},
+  title   = {An analysis of approximations for maximizing submodular set functions---I},
+  journal = {Mathematical Programming},
+  volume  = {14}, number = {1}, pages = {265--294}, year = {1978},
+  doi     = {10.1007/BF01588971}
+}
+@article{feige1998,
+  author  = {Feige, Uriel},
+  title   = {A threshold of ln n for approximating set cover},
+  journal = {Journal of the ACM},
+  volume  = {45}, number = {4}, pages = {634--652}, year = {1998},
+  doi     = {10.1145/285055.285059}
+}
+@article{feo1995,
+  author  = {Feo, Thomas A. and Resende, Mauricio G. C.},
+  title   = {Greedy randomized adaptive search procedures},
+  journal = {Journal of Global Optimization},
+  volume  = {6}, number = {2}, pages = {109--133}, year = {1995},
+  doi     = {10.1007/BF01096763}
+}
+@incollection{krause2014,
+  author    = {Krause, Andreas and Golovin, Daniel},
+  title     = {Submodular Function Maximization},
+  booktitle = {Tractability: Practical Approaches to Hard Problems},
+  publisher = {Cambridge University Press}, pages = {71--104}, year = {2014}
+}
+```
+
+---
+
 ## Draft text for the response (to adapt)
 
 > Following the reviewer's suggestion (Comment 3.2), we implemented a
