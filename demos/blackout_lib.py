@@ -106,24 +106,52 @@ def build_model(dataset, device, threshold, alpha):
 
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             max_search_loops, max_rounds, max_refs, n_sample, batch, multi_devices, n_workers, quiet,
-            coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0):
+            coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
+            resume=False):
     """Run one RSR rule extraction into `out`. Returns (res, wall_seconds).
 
     `multi_devices` (list of GPUs) parallelises the sampling/classification;
     `n_workers` (CPU processes) parallelises the sfun evaluation + minimisation.
     The two are independent and can be combined on an HPC GPU node.
+
+    `resume=True` warm-starts from the references last saved in `out`
+    (refs_up_1.pt/.json + refs_low_0.pt/.json, written every `save_every`
+    rounds), continuing where a killed run left off and appending to
+    metrics.json. Up to `save_every` rounds since the last checkpoint are lost.
     """
     out.mkdir(parents=True, exist_ok=True)
-    # metrics.json is appended to by RSR; drop any stale copy from a prior run
-    stale = out / "metrics.json"
-    if stale.exists():
-        stale.unlink()
+
+    refs_upper, refs_lower = [], []
+    refs_mat_upper, refs_mat_lower = None, None
+    if resume:
+        up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"
+        low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"
+        if up_pt.exists() and up_json.exists():
+            def _load_dicts(p):  # json stores (op, state) as [op, state]; restore tuples
+                with open(p) as f:
+                    return [{k: (tuple(v) if isinstance(v, list) else v)
+                             for k, v in d.items()} for d in json.load(f)]
+            refs_upper = _load_dicts(up_json)
+            refs_mat_upper = torch.load(up_pt, weights_only=True).to(probs.device)
+            if low_pt.exists() and low_json.exists():
+                refs_lower = _load_dicts(low_json)
+                refs_mat_lower = torch.load(low_pt, weights_only=True).to(probs.device)
+            print(f"Resuming from checkpoint in {out}: "
+                  f"{len(refs_upper)} survival + {len(refs_lower)} failure references")
+        else:
+            print(f"--resume set but no checkpoint found in {out}; starting fresh")
+    else:
+        # fresh run: metrics.json is appended to by RSR; drop any stale copy
+        stale = out / "metrics.json"
+        if stale.exists():
+            stale.unlink()
 
     def _go():
         return rsr.run_ref_extraction_by_mcs(
             sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
             sys_upper_st=1,               # system states: 0 = blackout, 1 = survive
-            refs_upper=[], refs_lower=[],
+            refs_upper=refs_upper, refs_lower=refs_lower,
+            refs_mat_upper=refs_mat_upper, refs_mat_lower=refs_mat_lower,
             unk_prob_thres=unk_thres, unk_prob_opt=unk_opt,
             n_sample=n_sample, max_search_loops=max_search_loops, max_rounds=max_rounds,
             max_refs=max_refs, sample_batch_size=batch,
@@ -381,7 +409,8 @@ def resolve_workers(n_workers: int):
 # ----------------------------------------------------------------------------
 def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
         max_search_loops, max_rounds, max_refs, n_sample, batch, device, devices, n_workers, out, verbose, runs,
-        coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0):
+        coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
+        resume=False):
     """Full demo run: single detailed report (runs<=1) or multi-run summary."""
     dev, multi_devices, _ = resolve_devices(device, devices)
     n_workers = resolve_workers(n_workers)
@@ -401,7 +430,7 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
                   n_sample=n_sample, batch=batch, multi_devices=multi_devices,
                   n_workers=n_workers, coverage_aware=coverage_aware,
                   ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
-                  ca_failure_beta=ca_failure_beta)
+                  ca_failure_beta=ca_failure_beta, resume=resume)
 
     if runs <= 1:
         # ---- single run: full report ----
@@ -471,6 +500,7 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
         ca_n_orders: int = typer.Option(4, help="Coverage-aware: coordinate orders tried per seed (set 1 to isolate greedy multi-seed selection at ~baseline cost)"),
         ca_max_add: int = typer.Option(4, help="Coverage-aware: references committed per round (greedy)"),
         ca_failure_beta: float = typer.Option(0.0, help="Coverage-aware: >0 biases seeds+coverage toward the failure boundary (try 2-5); 0 = uniform/mass-optimal"),
+        resume: bool = typer.Option(False, "--resume", help="Warm-start from references last checkpointed in --out (continue a run killed by walltime)"),
     ):
         """Estimate P(blackout) and the critical failure modes for this grid."""
         run(title=title, ref_pf=ref_pf, dataset=dataset, threshold=threshold, alpha=alpha,
@@ -479,6 +509,6 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
             batch=batch, device=device, devices=devices, n_workers=n_workers, out=out,
             verbose=verbose, runs=runs, coverage_aware=coverage_aware,
             ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
-            ca_failure_beta=ca_failure_beta)
+            ca_failure_beta=ca_failure_beta, resume=resume)
 
     return app
