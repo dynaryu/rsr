@@ -1,0 +1,77 @@
+{
+  "runs": [
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.72183,
+      "gap": 0.27817,
+      "n_surv_rules": 10032,
+      "n_fail_rules": 5,
+      "rounds": 209,
+      "runtime_s": 3507.494765996933
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.725,
+      "gap": 0.275,
+      "n_surv_rules": 10032,
+      "n_fail_rules": 4,
+      "rounds": 209,
+      "runtime_s": 3586.3176984786987
+    },
+    {
+      "p_blackout": 0.0,
+      "p_survival": 0.72399,
+      "gap": 0.27601,
+      "n_surv_rules": 10032,
+      "n_fail_rules": 6,
+      "rounds": 209,
+      "runtime_s": 3629.6138005256653
+    }
+  ],
+  "aggregate": {
+    "P(blackout)": {
+      "mean": 0.0,
+      "std": 0.0,
+      "min": 0.0,
+      "max": 0.0,
+      "cv": 0.0
+    },
+    "bound gap": {
+      "mean": 0.2763933333333333,
+      "std": 0.0016193928903552907,
+      "min": 0.275,
+      "max": 0.27817,
+      "cv": 0.00585901573972584
+    },
+    "surv rules": {
+      "mean": 10032.0,
+      "std": 0.0,
+      "min": 10032,
+      "max": 10032,
+      "cv": 0.0
+    },
+    "fail rules": {
+      "mean": 5.0,
+      "std": 1.0,
+      "min": 4,
+      "max": 6,
+      "cv": 0.2
+    },
+    "rounds": {
+      "mean": 209.0,
+      "std": 0.0,
+      "min": 209,
+      "max": 209,
+      "cv": 0.0
+    },
+    "runtime_s": {
+      "mean": 3574.475421667099,
+      "std": 61.91481477497403,
+      "min": 3507.494765996933,
+      "max": 3629.6138005256653,
+      "cv": 0.017321370962483103
+    }
+  },
+  "mean_p_blackout": 0.0,
+  "reference_p_failure": 0.0001
+}

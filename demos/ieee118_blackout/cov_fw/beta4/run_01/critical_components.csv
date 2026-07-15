@@ -1,0 +1,17 @@
+component,single_point_of_failure,appears_in_n_cutsets,min_cutset_size
+vbus59,False,4,7
+vbus39,False,3,7
+vbus49,False,3,7
+vbus54,False,3,7
+vbus56,False,3,7
+br79,False,2,7
+vbus46,False,1,7
+vbus55,False,1,7
+br35,False,1,7
+br151,False,1,7
+vbus24,False,1,7
+vbus40,False,1,7
+vbus85,False,1,7
+vbus89,False,1,7
+vbus90,False,1,7
+vbus92,False,1,7

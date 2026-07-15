@@ -1,0 +1,50 @@
+{
+  "p_blackout": 0.0,
+  "p_survival": 0.7238265,
+  "unknown_gap": 0.2761735,
+  "p_blackout_bounds": [
+    0.0,
+    0.2761735
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 13.8,
+  "runtime_sec": 3520.0089502334595,
+  "n_survival_rules": 10032,
+  "n_failure_rules": 4,
+  "n_cutsets": 4,
+  "single_points_of_failure": [],
+  "smallest_cutsets": [
+    {
+      "vbus45": 0,
+      "vbus56": 0,
+      "vbus75": 0,
+      "vbus80": 0,
+      "vbus89": 0
+    },
+    {
+      "vbus49": 0,
+      "vbus75": 0,
+      "vbus89": 0,
+      "vbus90": 2,
+      "vbus92": 1,
+      "vbus116": 0
+    },
+    {
+      "vbus49": 0,
+      "vbus75": 0,
+      "vbus89": 0,
+      "vbus92": 1,
+      "vbus116": 0,
+      "br181": 0
+    },
+    {
+      "vbus49": 0,
+      "vbus75": 0,
+      "vbus89": 0,
+      "vbus90": 2,
+      "vbus92": 2,
+      "vbus116": 0,
+      "br181": 0
+    }
+  ]
+}
