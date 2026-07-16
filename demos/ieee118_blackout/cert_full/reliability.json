@@ -1,0 +1,112 @@
+{
+  "p_blackout": 3.17e-05,
+  "p_survival": 0.7375383,
+  "unknown_gap": 0.26243,
+  "p_blackout_bounds": [
+    3.17e-05,
+    0.2624617
+  ],
+  "reference_p_failure": 0.0001,
+  "blackout_threshold_pct": 13.8,
+  "runtime_sec": 23584.412229299545,
+  "n_survival_rules": 100017,
+  "n_failure_rules": 11,
+  "n_failure_cuts": 42,
+  "n_cutsets": 11,
+  "single_points_of_failure": [],
+  "smallest_cutsets": [
+    {
+      "vbus45": 0,
+      "vbus59": 0,
+      "vbus74": 1,
+      "vbus80": 0,
+      "br116": 0
+    },
+    {
+      "vbus31": 0,
+      "vbus54": 0,
+      "vbus89": 0,
+      "vbus90": 0,
+      "vbus116": 0
+    },
+    {
+      "vbus59": 0,
+      "vbus78": 0,
+      "vbus85": 1,
+      "vbus89": 0,
+      "vbus92": 1
+    },
+    {
+      "vbus42": 0,
+      "vbus59": 0,
+      "vbus85": 1,
+      "vbus89": 0,
+      "vbus90": 2
+    },
+    {
+      "vbus27": 0,
+      "vbus59": 0,
+      "vbus89": 0,
+      "vbus92": 2,
+      "vbus96": 0
+    },
+    {
+      "vbus42": 0,
+      "vbus76": 1,
+      "vbus77": 1,
+      "vbus80": 0,
+      "vbus89": 0,
+      "vbus90": 1
+    },
+    {
+      "vbus46": 0,
+      "vbus74": 1,
+      "vbus77": 1,
+      "vbus80": 0,
+      "vbus85": 0,
+      "vbus116": 0,
+      "br145": 0
+    },
+    {
+      "vbus40": 0,
+      "vbus55": 0,
+      "vbus74": 1,
+      "vbus80": 0,
+      "vbus85": 2,
+      "vbus89": 0,
+      "vbus92": 2,
+      "vbus104": 0
+    },
+    {
+      "vbus46": 0,
+      "vbus55": 0,
+      "vbus59": 0,
+      "vbus89": 1,
+      "vbus90": 2,
+      "vbus92": 1,
+      "vbus116": 0,
+      "br139": 0
+    },
+    {
+      "vbus12": 0,
+      "vbus15": 0,
+      "vbus51": 0,
+      "vbus74": 1,
+      "vbus77": 1,
+      "vbus80": 0,
+      "vbus116": 0,
+      "br61": 0
+    },
+    {
+      "vbus29": 0,
+      "vbus74": 1,
+      "vbus76": 1,
+      "vbus77": 2,
+      "vbus80": 0,
+      "vbus89": 0,
+      "vbus90": 2,
+      "vbus92": 1,
+      "vbus100": 0
+    }
+  ]
+}
