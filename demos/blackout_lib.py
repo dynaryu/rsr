@@ -101,12 +101,14 @@ def build_model(dataset, device, threshold, alpha):
     print(f"  All operational: blackout={b_ok:6.2f}%  sys_st={st_ok}")
     print(f"  All failed:      blackout={b_bad:6.2f}%  sys_st={st_bad}")
 
-    return probs, row_names, n_state, sfun
+    model_info = {"case_path": case_path, "probs_dict": probs_dict, "dcopt": dcopt}
+    return probs, row_names, n_state, sfun, model_info
 
 
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             max_search_loops, max_rounds, max_refs, n_sample, batch, multi_devices, n_workers, quiet,
             coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
+            ref_generator=None, cut_generator=None, initial_cuts=None,
             resume=False):
     """Run one RSR rule extraction into `out`. Returns (res, wall_seconds).
 
@@ -123,7 +125,15 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
 
     refs_upper, refs_lower = [], []
     refs_mat_upper, refs_mat_lower = None, None
+    lower_cuts = list(initial_cuts) if initial_cuts else None
     if resume:
+        cuts_pkl = out / "failure_cuts_0.pkl"
+        if cuts_pkl.exists():
+            import pickle
+            with open(cuts_pkl, "rb") as f:
+                resumed = pickle.load(f)
+            lower_cuts = resumed + (lower_cuts or [])
+            print(f"Resuming with {len(resumed)} failure cuts from {cuts_pkl}")
         up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"
         low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"
         if up_pt.exists() and up_json.exists():
@@ -159,6 +169,8 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             coverage_aware=coverage_aware,
             ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
             ca_failure_beta=ca_failure_beta,
+            ref_generator=ref_generator, cut_generator=cut_generator,
+            lower_cuts=lower_cuts,
         )
 
     t0 = time.time()
@@ -230,6 +242,7 @@ def analyse(res, threshold, elapsed, ref_pf):
         "runtime_sec": elapsed,
         "n_survival_rules": len(rules_surv),
         "n_failure_rules": len(rules_fail),
+        "n_failure_cuts": len(res.get("lower_cuts", [])),
         "n_cutsets": len(cutsets),
         "single_points_of_failure": spofs,
         "smallest_cutsets": cutsets[:20],
@@ -410,7 +423,7 @@ def resolve_workers(n_workers: int):
 def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
         max_search_loops, max_rounds, max_refs, n_sample, batch, device, devices, n_workers, out, verbose, runs,
         coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
-        resume=False):
+        cert=False, sus_cuts=0, sus_runs=1, sus_p0=0.1, resume=False):
     """Full demo run: single detailed report (runs<=1) or multi-run summary."""
     dev, multi_devices, _ = resolve_devices(device, devices)
     n_workers = resolve_workers(n_workers)
@@ -423,14 +436,42 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
           f"(visible: {len(detect_gpus())} GPU, {detect_cpus()} CPU)")
 
     # Build the model once (shared across all repetitions).
-    probs, row_names, n_state, sfun = build_model(dataset, dev, threshold, alpha)
+    probs, row_names, n_state, sfun, model_info = build_model(dataset, dev, threshold, alpha)
+
+    # LP-certificate generators: survival boxes + failure half-space cuts read
+    # off single DC-OPF solves (see cert_lib.py); rsr verifies each box corner
+    # with one sfun call and falls back to the minimiser when a generator
+    # declines.
+    ref_generator = cut_generator = None
+    initial_cuts = None
+    if cert:
+        from cert_lib import CertModel, sus_failure_cuts, refined_cut_generator  # lazy: needs the dataset's scripts on sys.path
+        cm = CertModel(model_info["case_path"], model_info["probs_dict"],
+                       threshold, alpha)
+        ref_generator = lambda seed: cm.extract(seed, variant="cert")  # noqa: E731
+        cut_generator = refined_cut_generator(cm, model_info["dcopt"])
+        print("  Certificates: LP survival boxes + dual failure cuts (cert_lib)")
+
+        if sus_cuts > 0:
+            # SuS -> cut pipeline: walk to the failure boundary with Subset
+            # Simulation and convert every distinct failed state found into a
+            # dual cut, so p_lower accumulates from round one.
+            print(f"\nSuS -> cut pipeline: {sus_runs} run(s), "
+                  f"{sus_cuts} samples/level, p0={sus_p0} ...", flush=True)
+            initial_cuts, _sus_stats = sus_failure_cuts(
+                cm, model_info["dcopt"], probs, row_names,
+                sys_surv_st=1, n_per_level=sus_cuts, p0=sus_p0,
+                n_runs=sus_runs, n_workers=n_workers, verbose=True)
 
     common = dict(unk_thres=unk_thres, unk_opt=unk_opt, max_search_loops=max_search_loops,
                   max_rounds=max_rounds, max_refs=max_refs,
                   n_sample=n_sample, batch=batch, multi_devices=multi_devices,
                   n_workers=n_workers, coverage_aware=coverage_aware,
                   ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
-                  ca_failure_beta=ca_failure_beta, resume=resume)
+                  ca_failure_beta=ca_failure_beta,
+                  ref_generator=ref_generator, cut_generator=cut_generator,
+                  initial_cuts=initial_cuts,
+                  resume=resume)
 
     if runs <= 1:
         # ---- single run: full report ----
@@ -500,6 +541,10 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
         ca_n_orders: int = typer.Option(4, help="Coverage-aware: coordinate orders tried per seed (set 1 to isolate greedy multi-seed selection at ~baseline cost)"),
         ca_max_add: int = typer.Option(4, help="Coverage-aware: references committed per round (greedy)"),
         ca_failure_beta: float = typer.Option(0.0, help="Coverage-aware: >0 biases seeds+coverage toward the failure boundary (try 2-5); 0 = uniform/mass-optimal"),
+        cert: bool = typer.Option(False, "--cert", help="LP-certificate references: survival boxes + dual failure cuts from single DC-OPF solves (cert_lib.py)"),
+        sus_cuts: int = typer.Option(0, help="With --cert: Subset-Simulation samples per level for the SuS->cut failure pipeline (0 = off; try 1000)"),
+        sus_runs: int = typer.Option(1, help="Independent SuS repetitions (diversifies the failure modes found)"),
+        sus_p0: float = typer.Option(0.1, help="SuS intermediate conditional probability"),
         resume: bool = typer.Option(False, "--resume", help="Warm-start from references last checkpointed in --out (continue a run killed by walltime)"),
     ):
         """Estimate P(blackout) and the critical failure modes for this grid."""
@@ -509,6 +554,7 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
             batch=batch, device=device, devices=devices, n_workers=n_workers, out=out,
             verbose=verbose, runs=runs, coverage_aware=coverage_aware,
             ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
-            ca_failure_beta=ca_failure_beta, resume=resume)
+            ca_failure_beta=ca_failure_beta, cert=cert,
+            sus_cuts=sus_cuts, sus_runs=sus_runs, sus_p0=sus_p0, resume=resume)
 
     return app

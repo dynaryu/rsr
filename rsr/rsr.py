@@ -6,7 +6,7 @@ from math import prod
 import math
 from decimal import Decimal
 import numpy as np
-import os, json, time
+import os, json, time, pickle
 from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence, Iterable, Union
 from torch import Tensor
 import psutil
@@ -21,6 +21,9 @@ import rsr
 _MP_SFUN = None
 _MP_SYS_UPPER_ST = None
 _MP_N_STATE = None
+_MP_REF_GEN = None
+_MP_CUT_GEN = None
+_MP_ROW_NAMES = None
 
 
 def _minimize_one_unknown(args):
@@ -78,6 +81,82 @@ def _coverage_minimize_worker(args):
             seed_state, sfun, max_state=n_state - 1,
             sys_lower_st=sys_upper_st - 1, fval=None, seed=perm_seed)
     return side, ref, int(info.get("attempts", 0))
+
+
+def cert_corner_state(ref, row_names):
+    """Minimal ('corner') component state of a '>=' box reference: every
+    conditioned component at its reference state, everything else at 0."""
+    st = {n: 0 for n in row_names}
+    for name, (_op, s) in ref.items():
+        if name != 'sys':
+            st[name] = s
+    return st
+
+
+def _certify_one_unknown(comps_st):
+    """Worker: resolve one unknown sample via the certificate generators.
+
+    Tries the LP-certificate generator for the sample's side first (survival
+    box from ``_MP_REF_GEN``, verified with one sfun call at its corner;
+    failure half-space cut from ``_MP_CUT_GEN``, self-verifying) and falls
+    back to the componentwise minimiser when no generator is set for that
+    side, the generator declines, or corner verification fails.
+
+    Returns ``(kind, payload, sys_st, n_sfun, n_lp)`` with ``kind`` in
+    ``{'upper', 'lower', 'cut'}``; ``payload`` is a reference dict for the
+    box kinds or an opaque cut object (must expose
+    ``certify(states, name_pos, n_state)``) for ``'cut'``.
+    """
+    sfun = _MP_SFUN
+    sys_upper_st = _MP_SYS_UPPER_ST
+    n_state = _MP_N_STATE
+    ref_gen = _MP_REF_GEN
+    cut_gen = _MP_CUT_GEN
+    row_names = _MP_ROW_NAMES
+
+    fval, sys_st, _ = sfun(comps_st)
+    n_sfun, n_lp = 1, 0
+
+    if sys_st >= sys_upper_st:
+        if ref_gen is not None:
+            ref, info = ref_gen(comps_st)
+            n_lp += int((info or {}).get("n_lp", 1))
+            if ref is not None:
+                _f, st2, _ = sfun(cert_corner_state(ref, row_names))
+                n_sfun += 1
+                if st2 >= sys_upper_st:
+                    return 'upper', ref, sys_st, n_sfun, n_lp
+        min_ref, info = minimise_upper_states_random(
+            comps_st, sfun, sys_upper_st=sys_upper_st, fval=fval)
+        return 'upper', min_ref, sys_st, n_sfun + int(info.get('attempts', 0)), n_lp
+    else:
+        if cut_gen is not None:
+            cut, info = cut_gen(comps_st)
+            n_lp += int((info or {}).get("n_lp", 1))
+            if cut is not None:
+                return 'cut', cut, sys_st, n_sfun, n_lp
+        min_ref, info = minimise_lower_states_random(
+            comps_st, sfun, max_state=n_state - 1,
+            sys_lower_st=sys_upper_st - 1, fval=fval)
+        return 'lower', min_ref, sys_st, n_sfun + int(info.get('attempts', 0)), n_lp
+
+
+def _apply_cuts_to_result(samples, res, cut_fn):
+    """Reclassify cut-certified unknown samples as 'lower' in a
+    classification result from :func:`classify_samples_with_indices`
+    (``return_masks=True`` form). ``cut_fn(samples) -> BoolTensor``."""
+    if res['unknown'] == 0:
+        return res
+    extra = cut_fn(samples) & res['mask_unknown']
+    if not bool(extra.any()):
+        return res
+    res['mask_lower'] = res['mask_lower'] | extra
+    res['mask_unknown'] = res['mask_unknown'] & ~extra
+    res['idx_lower'] = torch.where(res['mask_lower'])[0]
+    res['idx_unknown'] = torch.where(res['mask_unknown'])[0]
+    res['lower'] = int(res['mask_lower'].sum().item())
+    res['unknown'] = int(res['mask_unknown'].sum().item())
+    return res
 
 
 # For use in mixted sorting
@@ -610,7 +689,7 @@ def minimise_lower_states_random(
     return min_ref, info
 
 
-def from_ref_dict_to_mat(ref_dict, row_names, max_st):
+def from_ref_dict_to_mat(ref_dict, row_names, max_st, device=None):
     """
     Convert a ref dictionary to a matrix representation.
 
@@ -618,12 +697,14 @@ def from_ref_dict_to_mat(ref_dict, row_names, max_st):
         ref_dict (dict): {name: ('comparison_operator', state (int))}
         row_names (list): list of component names associated with each row in order
         max_st (int): the highest state
+        device: torch device for the result (default: cuda if available)
 
     Returns:
         mat (list): binary matrix with shape (n_comp, max_st)
 
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     mat = torch.zeros((len(row_names), max_st), dtype=torch.int32, device=device)
 
     for row, name in enumerate(row_names):  
@@ -1506,13 +1587,24 @@ def _sample_and_classify_on_device(args):
     """
     Sample + classify on a single GPU device. Used by multi-GPU sampling.
     Runs in a thread — GPU ops release the GIL during kernel execution.
+
+    ``args`` may carry an optional 6th element ``cut_fn`` (thread-shared
+    closure over the accumulated failure cuts); when given, cut-certified
+    unknown samples are reclassified as 'lower'.
     """
-    probs_dev, n_sample, refs_upper_dev, refs_lower_dev, with_indices = args
+    probs_dev, n_sample, refs_upper_dev, refs_lower_dev, with_indices, *rest = args
+    cut_fn = rest[0] if rest else None
     samples = sample_categorical(probs_dev, n_sample)
-    if with_indices:
-        res = classify_samples_with_indices(samples, refs_upper_dev, refs_lower_dev, return_masks=True)
-    else:
-        res = classify_samples(samples, refs_upper_dev, refs_lower_dev)
+    if cut_fn is None:
+        if with_indices:
+            res = classify_samples_with_indices(samples, refs_upper_dev, refs_lower_dev, return_masks=True)
+        else:
+            res = classify_samples(samples, refs_upper_dev, refs_lower_dev)
+        return samples, res
+    res = classify_samples_with_indices(samples, refs_upper_dev, refs_lower_dev, return_masks=True)
+    res = _apply_cuts_to_result(samples, res, cut_fn)
+    if not with_indices:
+        res = {k: res[k] for k in ("upper", "lower", "unknown")}
     return samples, res
 
 
@@ -1621,7 +1713,7 @@ def update_refs(min_comps_st, refs_dict, refs_mat, row_names, verbose=False):
         form.
     """
     _, _, n_state = refs_mat.shape
-    Rnew = from_ref_dict_to_mat(min_comps_st, row_names, n_state)
+    Rnew = from_ref_dict_to_mat(min_comps_st, row_names, n_state, device=refs_mat.device)
     is_Rnew_subset, are_Rset_subset = is_subset(Rnew, refs_mat)
 
     if is_Rnew_subset:
@@ -1663,7 +1755,7 @@ def update_refs_batch(new_refs_dicts, refs_dict, refs_mat, row_names, verbose=Fa
     # Step 1: convert all new refs to matrices
     new_mats = []
     for rd in new_refs_dicts:
-        new_mats.append(from_ref_dict_to_mat(rd, row_names, n_state))
+        new_mats.append(from_ref_dict_to_mat(rd, row_names, n_state, device=device))
     new_batch = torch.stack(new_mats, dim=0)  # (N_new, n_var, n_state)
     n_new = new_batch.shape[0]
 
@@ -2073,6 +2165,11 @@ def run_ref_extraction_by_mcs(
     ca_n_orders: int = 4,    # coordinate orders tried per seed
     ca_max_add: int = 4,     # references committed per round (greedy)
     ca_failure_beta: float = 0.0,  # >0 biases coverage-aware toward the failure boundary
+    # LP-certificate generators (optional, model-specific; see demos/cert_lib.py)
+    ref_generator: Optional[Callable] = None,  # comps_st -> (ref|None, info): survival box certificate
+    cut_generator: Optional[Callable] = None,  # comps_st -> (cut|None, info): failure half-space cut
+    lower_cuts: Optional[List[Any]] = None,    # initial failure cuts (e.g. resume)
+    cuts_pkl_name: str = None,
     ref_update_verbose: bool = True,
     # Parallelism
     n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
@@ -2131,6 +2228,22 @@ def run_ref_extraction_by_mcs(
             unknown candidates. ``0`` means ``n_sample // sample_batch_size``.
         min_ref_search: Whether to minimise newly found references
             before inserting them.
+        ref_generator: Optional model-specific certificate generator for the
+            survival side, ``comps_st -> (ref_dict | None, info)`` (e.g.
+            ``demos/cert_lib.py CertModel.extract``). When it returns a
+            reference, the loop verifies the box corner with one ``sfun``
+            call and commits it; on decline / failed verification it falls
+            back to the componentwise minimiser. Replaces the minimiser's
+            O(n log m) sfun calls per reference with ~1 LP solve + 1 call.
+        cut_generator: Optional generator for the failure side,
+            ``comps_st -> (cut | None, info)``. A cut is an opaque object
+            exposing ``certify(states_idx, name_pos, n_state) -> BoolTensor``
+            (e.g. ``CertModel.extract_failure_cut``'s half-space); certified
+            samples are classified 'lower' alongside the box references.
+            Cuts are pickled to ``cuts_pkl_name`` in ``output_dir``.
+        lower_cuts: Initial list of failure cuts (to resume a run).
+        cuts_pkl_name: Filename for pickled cuts. Defaults to
+            ``failure_cuts_{sys_upper_st-1}.pkl``.
         ref_update_verbose: Print progress messages during reference
             updates.
         n_workers: Number of CPU worker processes for parallel
@@ -2182,6 +2295,34 @@ def run_ref_extraction_by_mcs(
     # ---- initial state ----
     if refs_upper is None: refs_upper = []
     if refs_lower is None: refs_lower = []
+    if lower_cuts is None: lower_cuts = []
+    cert_mode = (ref_generator is not None) or (cut_generator is not None)
+    name_pos = {n: i for i, n in enumerate(row_names)}
+    if cuts_pkl_name is None:
+        cuts_pkl_name = f"failure_cuts_{sys_upper_st-1}.pkl"
+    cuts_pkl_path = os.path.join(output_dir, cuts_pkl_name)
+
+    def _cut_fn(samples):
+        """(B,) bool: samples certified failed by the accumulated dual cuts."""
+        states = samples.argmax(dim=2).to('cpu')
+        m = torch.zeros(states.shape[0], dtype=torch.bool)
+        for c in lower_cuts:
+            m |= c.certify(states, name_pos, n_state)
+        return m.to(samples.device)
+
+    def _classify_counts(s):
+        """classify_samples + cut reclassification (counts only)."""
+        if not lower_cuts:
+            return classify_samples(s, refs_mat_upper, refs_mat_lower)
+        r = classify_samples_with_indices(
+            s, refs_mat_upper, refs_mat_lower, return_masks=True)
+        r = _apply_cuts_to_result(s, r, _cut_fn)
+        return {k: r[k] for k in ("upper", "lower", "unknown")}
+
+    def _save_cuts():
+        if lower_cuts:
+            with open(cuts_pkl_path, "wb") as f:
+                pickle.dump(lower_cuts, f)
 
     device = probs.device
 
@@ -2207,12 +2348,18 @@ def run_ref_extraction_by_mcs(
     last_probs = {"upper": 0.0, "lower": 0.0, "unknown": 1.0}
 
     # ---- parallel worker pool (fork-based, inherits sfun via global) ----
-    global _MP_SFUN, _MP_SYS_UPPER_ST, _MP_N_STATE
+    global _MP_SFUN, _MP_SYS_UPPER_ST, _MP_N_STATE, \
+        _MP_REF_GEN, _MP_CUT_GEN, _MP_ROW_NAMES
     _pool = None
-    if n_workers > 1:
+    if n_workers > 1 or cert_mode:
+        # cert mode uses the module globals even when serial
         _MP_SFUN = sfun
         _MP_SYS_UPPER_ST = sys_upper_st
         _MP_N_STATE = n_state
+        _MP_REF_GEN = ref_generator
+        _MP_CUT_GEN = cut_generator
+        _MP_ROW_NAMES = row_names
+    if n_workers > 1:
         _ctx = mp.get_context('fork')
         _pool = _ctx.Pool(n_workers)
         print(f"Parallel mode: {n_workers} CPU workers for sfun + minimization")
@@ -2258,6 +2405,7 @@ def run_ref_extraction_by_mcs(
         # sfun calls consumed this round to find upper / lower minimal refs
         n_sfun_upper = 0
         n_sfun_lower = 0
+        n_lp_round = 0
 
         _ts = time.perf_counter()
         for i in range(search_loops):
@@ -2271,7 +2419,8 @@ def run_ref_extraction_by_mcs(
                     n_gi = per_gpu + (1 if gi < remainder else 0)
                     refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
                     refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
-                    tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, True))
+                    tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, True,
+                                  _cut_fn if lower_cuts else None))
 
                 futures = list(_gpu_thread_pool.map(_sample_and_classify_on_device, tasks))
 
@@ -2286,9 +2435,13 @@ def run_ref_extraction_by_mcs(
 
                 # Re-classify merged batch on primary device for correct indices
                 res = classify_samples_with_indices(samples, refs_mat_upper, refs_mat_lower, return_masks=True)
+                if lower_cuts:
+                    res = _apply_cuts_to_result(samples, res, _cut_fn)
             else:
                 samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
                 res = classify_samples_with_indices(samples, refs_mat_upper, refs_mat_lower, return_masks=True)
+                if lower_cuts:
+                    res = _apply_cuts_to_result(samples, res, _cut_fn)
 
                 counts["upper"] += int(res["upper"])
                 counts["lower"]  += int(res["lower"])
@@ -2326,13 +2479,14 @@ def run_ref_extraction_by_mcs(
                             n_gi = per_gpu + (1 if gi < remainder else 0)
                             refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
                             refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
-                            tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
+                            tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False,
+                                      _cut_fn if lower_cuts else None))
                         for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                             for k in c2:
                                 c2[k] += ci[k]
                     else:
                         s = sample_categorical(probs, sample_batch_size)
-                        ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
+                        ci = _classify_counts(s)
                         for k in c2:
                             c2[k] += ci[k]
                 sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2355,8 +2509,10 @@ def run_ref_extraction_by_mcs(
                 "t_probs": round(dt - _t_search, 3),
                 "n_refs_upper": int(len(refs_mat_upper)),
                 "n_refs_lower": int(len(refs_mat_lower)),
+                "n_cuts": len(lower_cuts),
                 "n_sfun_upper": n_sfun_upper,
                 "n_sfun_lower": n_sfun_lower,
+                "n_lp": n_lp_round,
                 "probs_updated": probs_updated,
                 "p_upper": last_probs["upper"],
                 "p_lower": last_probs["lower"],
@@ -2375,6 +2531,7 @@ def run_ref_extraction_by_mcs(
                 _save_json(refs_lower, refs_lower_path)
                 _save_pt(refs_mat_upper, refs_upper_pt_path)
                 _save_pt(refs_mat_lower, refs_lower_pt_path)
+                _save_cuts()
 
             continue  # go to next while-check (likely exit if unk_prob <= thresh)
 
@@ -2408,6 +2565,57 @@ def run_ref_extraction_by_mcs(
             print(f"Coverage-aware round: {ca['covered']}/{ca['n_unknown']} unclassified samples "
                   f"covered by {len(ca['new_upper']) + len(ca['new_lower'])} new refs")
             _t_refs = time.perf_counter() - _ts
+
+        elif cert_mode:
+            # ---- LP-certificate generation (see demos/cert_lib.py) ----
+            # One seed per worker; each resolves via the certificate generator
+            # for its side, falling back to the componentwise minimiser.
+            n_pick = min(max(n_workers, 1), len(idx_unknown))
+            perm = torch.randperm(len(idx_unknown))[:n_pick]
+            picked_indices = idx_unknown[perm]
+
+            tasks = []
+            for idx_i in picked_indices:
+                s0 = samples[idx_i.item()]
+                sts = torch.argmax(s0, dim=1).tolist()
+                tasks.append({row_names[k]: int(sts[k]) for k in range(n_vars)})
+
+            if _pool is not None:
+                results = _pool.map(_certify_one_unknown, tasks)
+            else:
+                results = [_certify_one_unknown(t) for t in tasks]
+            _t_minimize = time.perf_counter() - _ts
+
+            _ts = time.perf_counter()
+            new_surv_dicts, new_fail_dicts, new_cuts = [], [], []
+            for kind, payload, sys_st, n_sfun, n_lp in results:
+                n_lp_round += n_lp
+                if kind == 'upper':
+                    new_surv_dicts.append(payload)
+                    n_sfun_upper += n_sfun
+                elif kind == 'lower':
+                    new_fail_dicts.append(payload)
+                    n_sfun_lower += n_sfun
+                else:  # 'cut'
+                    new_cuts.append(payload)
+                    n_sfun_lower += n_sfun
+                if sys_st not in sys_val_list:
+                    sys_val_list.append(sys_st)
+                    sys_val_list.sort(key=mixed_sort_key)
+
+            if new_surv_dicts:
+                refs_upper, refs_mat_upper, n_add, n_rem = update_refs_batch(
+                    new_surv_dicts, refs_upper, refs_mat_upper, row_names, verbose=ref_update_verbose)
+                print(f"Survival: {n_add} refs added, {n_rem} removed "
+                      f"(from {len(new_surv_dicts)} certificates)")
+            if new_fail_dicts:
+                refs_lower, refs_mat_lower, n_add, n_rem = update_refs_batch(
+                    new_fail_dicts, refs_lower, refs_mat_lower, row_names, verbose=ref_update_verbose)
+                print(f"Failure: {n_add} refs added, {n_rem} removed "
+                      f"(from {len(new_fail_dicts)} candidates)")
+            if new_cuts:
+                lower_cuts.extend(new_cuts)
+                print(f"Failure cuts: {len(new_cuts)} added (total {len(lower_cuts)})")
 
         elif _pool is not None and min_ref_search:
             # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
@@ -2527,13 +2735,14 @@ def run_ref_extraction_by_mcs(
                         n_gi = per_gpu + (1 if gi < remainder else 0)
                         refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
                         refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
-                        tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
+                        tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False,
+                                      _cut_fn if lower_cuts else None))
                     for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                         for k in c2:
                             c2[k] += ci[k]
                 else:
                     s = sample_categorical(probs, sample_batch_size)
-                    ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
+                    ci = _classify_counts(s)
                     for k in c2:
                         c2[k] += ci[k]
             sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2557,8 +2766,10 @@ def run_ref_extraction_by_mcs(
             "t_probs": round(_t_probs, 3),
             "n_refs_upper": int(len(refs_mat_upper)),
             "n_refs_lower": int(len(refs_mat_lower)),
+            "n_cuts": len(lower_cuts),
             "n_sfun_upper": n_sfun_upper,
             "n_sfun_lower": n_sfun_lower,
+            "n_lp": n_lp_round,
             "probs_updated": probs_updated,
             "p_upper": last_probs["upper"],
             "p_lower": last_probs["lower"],
@@ -2577,6 +2788,7 @@ def run_ref_extraction_by_mcs(
             _save_json(refs_lower, refs_lower_path)
             _save_pt(refs_mat_upper, refs_upper_pt_path)
             _save_pt(refs_mat_lower, refs_lower_pt_path)
+            _save_cuts()
 
         if n_round >= max_rounds:
             print(f"Reached maximum rounds ({max_rounds}). Terminating.")
@@ -2599,6 +2811,7 @@ def run_ref_extraction_by_mcs(
     _save_json(refs_lower, refs_lower_path)
     _save_pt(refs_mat_upper, refs_upper_pt_path)
     _save_pt(refs_mat_lower, refs_lower_pt_path)
+    _save_cuts()
 
     # Final probability check
     loops = max(n_sample // sample_batch_size, 1)
@@ -2613,13 +2826,14 @@ def run_ref_extraction_by_mcs(
                 n_gi = per_gpu + (1 if gi < remainder else 0)
                 refs_s_gi = refs_mat_upper.to(_gpu_devices[gi])
                 refs_f_gi = refs_mat_lower.to(_gpu_devices[gi])
-                tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False))
+                tasks.append((_gpu_probs[gi], n_gi, refs_s_gi, refs_f_gi, False,
+                              _cut_fn if lower_cuts else None))
             for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
                 for k in c2:
                     c2[k] += ci[k]
         else:
             s = sample_categorical(probs, sample_batch_size)
-            ci = classify_samples(s, refs_mat_upper, refs_mat_lower)
+            ci = _classify_counts(s)
             for k in c2:
                 c2[k] += ci[k]
     sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
@@ -2633,8 +2847,10 @@ def run_ref_extraction_by_mcs(
         "time_sec": 0.0,
         "n_refs_upper": int(len(refs_mat_upper)),
         "n_refs_lower": int(len(refs_mat_lower)),
+        "n_cuts": len(lower_cuts),
         "n_sfun_upper": 0,
         "n_sfun_lower": 0,
+        "n_lp": 0,
         "probs_updated": True,
         "p_upper": sp2["upper"],
         "p_lower": sp2["lower"],
@@ -2658,6 +2874,8 @@ def run_ref_extraction_by_mcs(
         "refs_lower_path": refs_lower_path,
         "refs_upper_pt_path": refs_upper_pt_path,
         "refs_lower_pt_path": refs_lower_pt_path,
+        "lower_cuts": lower_cuts,
+        "cuts_pkl_path": cuts_pkl_path if lower_cuts else None,
         "metrics_log": metrics_log,
     }
 
