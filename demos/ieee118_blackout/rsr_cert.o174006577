@@ -1,0 +1,15 @@
+Job 174006577.gadi-pbs on gadi-gpu-v100-0110.gadi.nci.org.au: GPUs=[none] NCPUS=24
+
+======================================================================================
+                  Resource Usage on 2026-07-17 05:32:58:
+   Job Id:             174006577.gadi-pbs
+   Project:            n74
+   Exit Status:        0
+   Service Units:      474.88
+   NCPUs Requested:    24                  CPU Time Used: 10:08:29        
+   Memory Requested:   191.0GB               Memory Used: 9.68GB          
+   NGPUs Requested:    2                 GPU Utilisation: 15%             
+                                         GPU Memory Used: 63.42GB         
+   Walltime Requested: 24:00:00            Walltime Used: 06:35:44        
+   JobFS Requested:    12.0GB                 JobFS Used: 0B              
+======================================================================================
