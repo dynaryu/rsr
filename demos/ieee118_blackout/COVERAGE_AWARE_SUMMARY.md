@@ -138,6 +138,49 @@ worth in practice.
 
 ---
 
+## Failure-weighting variant (investigated — p^u-neutral, inconclusive on cut-sets)
+
+We also prototyped a **failure-weighted** coverage-aware variant (`ca_failure_beta`,
+β). It multiplies each unclassified sample's weight by `exp(β·d)`, where `d ∈ [0,1]`
+is the sample's normalised *degradation* (distance of its component states from the
+healthiest state; well-defined because the system is coherent/monotone). The weight
+biases both the seed draw and the greedy coverage score toward the failure boundary,
+where the residual unclassified mass was hypothesised to concentrate.
+
+A **matched** comparison (all three at n_seeds = 48, max_add = 48, n_orders = 4;
+run to 10,000 reference states; β = 0 is one run, β = 2 and β = 4 are three each)
+shows failure-weighting is **neutral on `p^u`**:
+
+| # reference states | β = 0 | β = 2 | β = 4 |
+|---:|---:|---:|---:|
+| 2,500  | 0.429 | 0.428 | 0.426 |
+| 5,000  | 0.345 | 0.349 | 0.345 |
+| 10,000 | 0.276 | 0.279 | 0.276 |
+
+The three curves are identical within run-to-run noise. (An earlier apparent
+*worsening* of β = 2/4 turned out to be a parameter confound — a change from
+n_seeds/max_add = 32/16 to 48/48 lowers greedy selectivity — not an effect of β;
+the matched control isolates and rules this out.) The only quantity β moved was the
+number of **failure references (cut-sets)** captured — median ≈ 5 at β = 4 versus 1
+at β = 0 — at no `p^u` cost, but with too few counts (1–8) and too few β = 0 runs to
+call this conclusive.
+
+**Caveat — the run may be too short to see β's true effect.** Failure references are
+rare and accumulate slowly, so 10,000 reference states may simply not be deep enough
+for a degradation bias to separate from β = 0: at this depth the search is still
+dominated by the large survival-mass residual, where β has no leverage by
+construction. Any genuine benefit — faster cut-set enumeration, or `p^u` reduction in
+the failure-proximal tail — would only be expected to emerge much closer to
+convergence (order 10⁵ references), which we have not reached here. So the honest
+status is **investigated, p^u-neutral at 10⁴ references, and inconclusive at the
+scale where it was hypothesised to matter** — not a refuted idea, an under-tested one.
+
+The practical read for the paper: use mass-optimal coverage-aware (β = 0) as the
+headline exact variant; keep β as a documented, no-`p^u`-cost knob for richer
+failure-mode output, flagged as needing a full-scale run to evaluate properly.
+
+---
+
 ## Algorithmic lineage (for citation)
 
 The two ingredients are standard combinatorial-optimisation heuristics; we cite
