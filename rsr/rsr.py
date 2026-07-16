@@ -141,6 +141,70 @@ def _certify_one_unknown(comps_st):
         return 'lower', min_ref, sys_st, n_sfun + int(info.get('attempts', 0)), n_lp
 
 
+def _compile_cuts(cuts, name_pos, n_state):
+    """Build a batched evaluator ``samples -> BoolTensor`` for a cut set.
+
+    Fast path — cuts implementing ``batch_tables(name_pos, n_state)`` (see
+    ``demos/cert_lib.py FailureCut``): the per-component linear contributions
+    of all C cuts are stacked into one (C, n_var*n_state) matrix, so a batch
+    costs a single matmul on the samples' one-hot encoding plus a scatter-add
+    for the product (line-availability) terms — instead of a Python loop over
+    cuts and terms. A small absolute slack is subtracted from each threshold
+    so float32 rounding can only *under*-certify (the sound direction).
+
+    Fallback — any cut without the protocol: per-cut ``certify`` on CPU
+    state indices (the original path).
+    """
+    if not cuts:
+        return lambda samples: torch.zeros(
+            samples.shape[0], dtype=torch.bool, device=samples.device)
+
+    if not all(hasattr(c, "batch_tables") for c in cuts):
+        def _eval_slow(samples):
+            states = samples.argmax(dim=2).to('cpu')
+            m = torch.zeros(states.shape[0], dtype=torch.bool)
+            for c in cuts:
+                m |= c.certify(states, name_pos, n_state)
+            return m.to(samples.device)
+        return _eval_slow
+
+    tables, thrs = [], []
+    pw, ppos, pcut = [], [], []
+    for ci, c in enumerate(cuts):
+        table, prod_terms, thr = c.batch_tables(name_pos, n_state)
+        tables.append(table)
+        thrs.append(thr)
+        for w, pos in prod_terms:
+            pw.append(w); ppos.append(pos); pcut.append(ci)
+    T = torch.stack(tables).reshape(len(cuts), -1).to(torch.float32)  # (C, D)
+    thr = torch.tensor(thrs, dtype=torch.float32)
+    thr = thr - 1e-4 * (1.0 + thr.abs())      # float32 safety slack
+    prod0 = None
+    if pw:
+        prod0 = (torch.tensor(pw, dtype=torch.float32),
+                 torch.tensor(ppos, dtype=torch.long),   # (K, 3)
+                 torch.tensor(pcut, dtype=torch.long))   # (K,)
+    dev_cache = {}
+
+    def _eval(samples):
+        dev = samples.device
+        if dev not in dev_cache:
+            dev_cache[dev] = (
+                T.to(dev), thr.to(dev),
+                tuple(t.to(dev) for t in prod0) if prod0 is not None else None)
+        Td, thrd, prod = dev_cache[dev]
+        oh = samples.reshape(samples.shape[0], -1).to(torch.float32)
+        W = oh @ Td.T                                     # (N, C)
+        if prod is not None:
+            pwd, pposd, pcutd = prod
+            alive = 1.0 - samples[:, :, 0].to(torch.float32)   # state >= 1
+            v = alive[:, pposd[:, 0]] * alive[:, pposd[:, 1]] * alive[:, pposd[:, 2]]
+            W.index_add_(1, pcutd, v * pwd)
+        return (W <= thrd).any(dim=1)
+
+    return _eval
+
+
 def _apply_cuts_to_result(samples, res, cut_fn):
     """Reclassify cut-certified unknown samples as 'lower' in a
     classification result from :func:`classify_samples_with_indices`
@@ -2302,13 +2366,20 @@ def run_ref_extraction_by_mcs(
         cuts_pkl_name = f"failure_cuts_{sys_upper_st-1}.pkl"
     cuts_pkl_path = os.path.join(output_dir, cuts_pkl_name)
 
+    _cut_compiled = {"n": -1, "eval": None}
+
     def _cut_fn(samples):
-        """(B,) bool: samples certified failed by the accumulated dual cuts."""
-        states = samples.argmax(dim=2).to('cpu')
-        m = torch.zeros(states.shape[0], dtype=torch.bool)
-        for c in lower_cuts:
-            m |= c.certify(states, name_pos, n_state)
-        return m.to(samples.device)
+        """(B,) bool: samples certified failed by the accumulated dual cuts.
+
+        Evaluates through a compiled batch evaluator (one matmul + one
+        scatter-add for all cuts; see :func:`_compile_cuts`), recompiled
+        whenever cuts are added. Thread-safe for the multi-GPU path: the
+        evaluator caches per-device tensor copies internally.
+        """
+        if _cut_compiled["n"] != len(lower_cuts):
+            _cut_compiled["n"] = len(lower_cuts)
+            _cut_compiled["eval"] = _compile_cuts(lower_cuts, name_pos, n_state)
+        return _cut_compiled["eval"](samples)
 
     def _classify_counts(s):
         """classify_samples + cut reclassification (counts only)."""

@@ -104,6 +104,27 @@ class FailureCut:
     def certify(self, states, name_pos, n_state):
         return self.W(states, name_pos, n_state) <= self.req0 - 1e-7
 
+    def batch_tables(self, name_pos, n_state):
+        """Vectorisation protocol for rsr's batched cut evaluation
+        (:func:`rsr.rsr._compile_cuts`).
+
+        Returns ``(table, product_terms, threshold)`` where ``table`` is a
+        (n_var, n_state) float64 tensor with ``table[i, s]`` = this cut's
+        linear contribution of component i at state s (bus-alive and
+        generator-fraction terms), ``product_terms`` is a list of
+        ``(w, (pos_br, pos_f, pos_t))`` for the 3-way line-availability
+        terms, and a sample is certified iff its total W <= ``threshold``.
+        """
+        table = torch.zeros(len(name_pos), n_state, dtype=torch.float64)
+        for n, w in self.bus_terms:
+            table[name_pos[n], 1:] += w
+        for n, w, fr in self.gen_terms:
+            row = [w * f for f in fr] + [w * fr[-1]] * (n_state - len(fr))
+            table[name_pos[n]] += torch.tensor(row, dtype=torch.float64)
+        prod = [(w, (name_pos[b], name_pos[f], name_pos[t]))
+                for w, b, f, t in self.line_terms]
+        return table, prod, self.req0 - 1e-7
+
 
 # ---------------------------------------------------------------------------
 # Certificate extractor
