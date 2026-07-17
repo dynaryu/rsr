@@ -1346,3 +1346,104 @@ def test_get_comp_cond_sys_prob__two_state(def_five_comp):
 
     assert cond_probs["lower"]  == pytest.approx(0.02152, rel=2e-2, abs=5e-4)
     assert cond_probs["upper"] == pytest.approx(0.97848, rel=2e-2, abs=5e-4)
+
+
+# ---------- Hybrid estimator (rules + Monte Carlo on the residual) ----------
+def _hybrid_problem():
+    """4 comps x 2 states; the system fails iff x0 == 0 (P = 0.1)."""
+    row_names = ['x0', 'x1', 'x2', 'x3']
+    n_state = 2
+    probs = torch.tensor([[0.1, 0.9]] * 4, dtype=torch.float32)
+
+    def sfun(comps_st):
+        st = 1 if comps_st['x0'] == 1 else 0
+        return st, st, None
+
+    return probs, row_names, n_state, sfun
+
+
+def test_wilson_interval():
+    lo, hi = rsr._wilson_interval(0, 100)
+    assert lo == 0.0 and 0.0 < hi < 0.05
+    lo, hi = rsr._wilson_interval(5, 100)
+    assert lo < 0.05 < hi
+    assert rsr._wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_hybrid_estimate_pure_mc():
+    # No rules: every sample goes through sfun; plain MC with a binomial CI.
+    probs, row_names, n_state, sfun = _hybrid_problem()
+    res = rsr.run_hybrid_estimate(
+        sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, n_sample=20_000, sample_batch_size=5_000,
+        seed=0, verbose=False)
+    assert res['n_sfun'] == 20_000
+    assert res['free_frac'] == 0.0
+    assert res['n_fail'] == res['n_fail_sfun']
+    assert res['p_fail'] == pytest.approx(0.1, abs=0.02)
+    lo, hi = res['ci95']
+    assert lo <= res['p_fail'] <= hi
+    assert lo <= 0.1 <= hi
+
+
+def test_hybrid_estimate_rules_classify_free():
+    # Rules cover the whole space -> zero sfun calls, and the estimate is
+    # identical to pure MC with the same seed (rules only remove cost).
+    probs, row_names, n_state, sfun = _hybrid_problem()
+    m_up = rsr.from_ref_dict_to_mat(
+        {'x0': ('>=', 1)}, row_names, n_state, device='cpu').unsqueeze(0)
+    m_low = rsr.from_ref_dict_to_mat(
+        {'x0': ('<=', 0)}, row_names, n_state, device='cpu').unsqueeze(0)
+
+    def sfun_guard(comps_st):
+        raise AssertionError("sfun must not be called when rules cover everything")
+
+    res = rsr.run_hybrid_estimate(
+        sfun=sfun_guard, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, refs_mat_upper=m_up, refs_mat_lower=m_low,
+        n_sample=20_000, sample_batch_size=5_000, seed=0, verbose=False)
+    assert res['n_sfun'] == 0
+    assert res['free_frac'] == 1.0
+    assert res['n_fail'] == res['n_fail_certified']
+
+    res_mc = rsr.run_hybrid_estimate(
+        sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, n_sample=20_000, sample_batch_size=5_000,
+        seed=0, verbose=False)
+    assert res['p_fail'] == res_mc['p_fail']
+
+
+class _StubCutX0:
+    """Failure cut without batch_tables: exercises the per-cut fallback."""
+
+    def certify(self, states, name_pos, n_state):
+        return states[:, name_pos['x0']] == 0
+
+
+def test_hybrid_estimate_with_cuts():
+    # Survival box + failure cut cover the whole space -> zero sfun calls.
+    probs, row_names, n_state, _ = _hybrid_problem()
+    m_up = rsr.from_ref_dict_to_mat(
+        {'x0': ('>=', 1)}, row_names, n_state, device='cpu').unsqueeze(0)
+
+    def sfun_guard(comps_st):
+        raise AssertionError("sfun must not be called")
+
+    res = rsr.run_hybrid_estimate(
+        sfun=sfun_guard, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, refs_mat_upper=m_up, lower_cuts=[_StubCutX0()],
+        n_sample=10_000, sample_batch_size=2_500, seed=0, verbose=False)
+    assert res['n_sfun'] == 0
+    assert res['n_fail'] == res['n_fail_certified']
+    assert res['p_fail'] == pytest.approx(0.1, abs=0.03)
+
+
+def test_hybrid_estimate_parallel_matches_serial():
+    probs, row_names, n_state, sfun = _hybrid_problem()
+    kwargs = dict(sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+                  sys_upper_st=1, n_sample=4_000, sample_batch_size=1_000,
+                  seed=7, verbose=False)
+    res1 = rsr.run_hybrid_estimate(n_workers=1, **kwargs)
+    res2 = rsr.run_hybrid_estimate(n_workers=2, **kwargs)
+    assert res1['p_fail'] == res2['p_fail']
+    assert res1['n_fail'] == res2['n_fail']

@@ -141,6 +141,15 @@ def _certify_one_unknown(comps_st):
         return 'lower', min_ref, sys_st, n_sfun + int(info.get('attempts', 0)), n_lp
 
 
+def _hybrid_eval_one(comps_st):
+    """Worker for the hybrid estimator: 1 if the state fails the system.
+
+    Accesses module-level shared state set before the pool is created.
+    """
+    _fval, sys_st, _ = _MP_SFUN(comps_st)
+    return int(sys_st < _MP_SYS_UPPER_ST)
+
+
 def _compile_cuts(cuts, name_pos, n_state):
     """Build a batched evaluator ``samples -> BoolTensor`` for a cut set.
 
@@ -2949,4 +2958,189 @@ def run_ref_extraction_by_mcs(
         "cuts_pkl_path": cuts_pkl_path if lower_cuts else None,
         "metrics_log": metrics_log,
     }
+
+
+def _wilson_interval(k: int, n: int, z: float = 1.959964) -> Tuple[float, float]:
+    """Wilson score interval for a binomial proportion (default 95%)."""
+    if n == 0:
+        return 0.0, 1.0
+    p = k / n
+    denom = 1.0 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1.0 - p) / n + z * z / (4.0 * n * n)) / denom
+    return max(centre - half, 0.0), min(centre + half, 1.0)
+
+
+def run_hybrid_estimate(
+    *,
+    sfun,
+    probs: torch.Tensor,
+    row_names: List[str],
+    n_state: int,
+    sys_upper_st: int,
+    refs_mat_upper: Optional[torch.Tensor] = None,
+    refs_mat_lower: Optional[torch.Tensor] = None,
+    lower_cuts: Optional[List[Any]] = None,
+    n_sample: int = 1_000_000,
+    sample_batch_size: int = 100_000,
+    n_workers: int = 1,
+    devices: Optional[List[str]] = None,
+    seed: Optional[int] = None,
+    output_dir: Optional[str] = None,
+    json_name: str = "hybrid.json",
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """Unbiased Monte-Carlo estimate of P(system fails), using the reference
+    rules and dual failure cuts as a free classifier.
+
+    Each sample is drawn iid from ``probs`` and first checked against the
+    reference stores (and cuts): rule-certified samples cost nothing; only
+    the residual unknowns are evaluated with ``sfun`` (in parallel over
+    ``n_workers``). Because the rules are sound, the result is *exactly* the
+    plain Monte-Carlo estimator of P(failure) — the rules only remove the
+    classified fraction of its sfun cost — so the usual binomial confidence
+    interval applies (Wilson score, 95%).
+
+    Complements :func:`run_ref_extraction_by_mcs`: the bounds
+    ``[p_lower, 1 - p_upper]`` from rule extraction are rigorous but can stay
+    wide when the box representation saturates; this returns an unbiased
+    point estimate with a CI for the same quantity, at a cost of
+    ``p_unknown * n_sample`` sfun calls.
+
+    Args:
+        sfun: System function ``comps_dict -> (fval, sys_state, info)``.
+        probs: Categorical component probabilities ``(n_var, n_state)``.
+        row_names: Component names matching the rows of ``probs``.
+        n_state: Number of states per component.
+        sys_upper_st: System states ``>= sys_upper_st`` count as survival.
+        refs_mat_upper: Survival reference tensor ``(n_refs, n_var, n_state)``.
+        refs_mat_lower: Failure reference tensor.
+        lower_cuts: Dual failure cuts (see ``_compile_cuts``).
+        n_sample: Total Monte-Carlo samples.
+        sample_batch_size: Samples per classification batch.
+        n_workers: CPU worker processes for the residual sfun evaluations.
+        devices: GPU devices to split each batch across (as in extraction).
+        seed: Optional ``torch.manual_seed`` for reproducibility.
+        output_dir: When set, the result dict is written there as
+            ``json_name``.
+
+    Returns:
+        Dict with ``p_fail``, ``ci95`` (low, high), the certified /
+        sfun-evaluated failure split, the free-classification fraction and
+        timing counters.
+    """
+    device = probs.device
+    n_vars = len(row_names)
+    if refs_mat_upper is None:
+        refs_mat_upper = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+    if refs_mat_lower is None:
+        refs_mat_lower = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+    lower_cuts = lower_cuts or []
+    name_pos = {n: i for i, n in enumerate(row_names)}
+    cut_fn = _compile_cuts(lower_cuts, name_pos, n_state) if lower_cuts else None
+
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    global _MP_SFUN, _MP_SYS_UPPER_ST
+    _MP_SFUN = sfun
+    _MP_SYS_UPPER_ST = sys_upper_st
+    _pool = None
+    if n_workers > 1:
+        _pool = mp.get_context('fork').Pool(n_workers)
+
+    _gpu_thread_pool = None
+    _gpu_probs, _gpu_refs = [], []
+    if devices is not None and len(devices) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        _gpu_devices = [torch.device(d) for d in devices]
+        _gpu_probs = [probs.to(d) for d in _gpu_devices]
+        _gpu_refs = [(refs_mat_upper.to(d), refs_mat_lower.to(d)) for d in _gpu_devices]
+        _gpu_thread_pool = ThreadPoolExecutor(max_workers=len(_gpu_devices))
+
+    def _classify_batch(b):
+        """Yield (samples, result-with-masks) pairs covering b fresh samples."""
+        if _gpu_thread_pool is not None:
+            n_gpus = len(_gpu_probs)
+            per_gpu, remainder = b // n_gpus, b % n_gpus
+            tasks = [(_gpu_probs[gi], per_gpu + (1 if gi < remainder else 0),
+                      _gpu_refs[gi][0], _gpu_refs[gi][1], True, cut_fn)
+                     for gi in range(n_gpus)]
+            yield from _gpu_thread_pool.map(_sample_and_classify_on_device, tasks)
+        else:
+            s = sample_categorical(probs, b)
+            r = classify_samples_with_indices(
+                s, refs_mat_upper, refs_mat_lower, return_masks=True)
+            if cut_fn is not None:
+                r = _apply_cuts_to_result(s, r, cut_fn)
+            yield s, r
+
+    n_upper_cert = n_fail_cert = n_fail_sfun = n_surv_sfun = 0
+    t0 = time.perf_counter()
+    t_sfun = 0.0
+    done = 0
+    batch_i = 0
+    while done < n_sample:
+        b = min(sample_batch_size, n_sample - done)
+        for s, r in _classify_batch(b):
+            n_upper_cert += int(r['upper'])
+            n_fail_cert += int(r['lower'])
+            idx = r['idx_unknown']
+            if idx.numel() > 0:
+                sts = torch.argmax(s[idx], dim=2).cpu().tolist()
+                tasks = [{row_names[k]: int(row[k]) for k in range(n_vars)}
+                         for row in sts]
+                _ts = time.perf_counter()
+                if _pool is not None:
+                    fails = _pool.map(_hybrid_eval_one, tasks,
+                                      chunksize=max(1, len(tasks) // (n_workers * 4)))
+                else:
+                    fails = [_hybrid_eval_one(t) for t in tasks]
+                t_sfun += time.perf_counter() - _ts
+                nf = int(sum(fails))
+                n_fail_sfun += nf
+                n_surv_sfun += len(fails) - nf
+        done += b
+        batch_i += 1
+        if verbose and (batch_i % 10 == 0 or done >= n_sample):
+            n_fail = n_fail_cert + n_fail_sfun
+            n_sfun_done = n_fail_sfun + n_surv_sfun
+            dt = time.perf_counter() - t0
+            eta = dt / done * (n_sample - done)
+            print(f"[hybrid] {done:,}/{n_sample:,} samples  "
+                  f"sfun {n_sfun_done:,}  fails {n_fail:,} "
+                  f"({n_fail_cert:,} cert + {n_fail_sfun:,} sfun)  "
+                  f"p_hat {n_fail / done:.3e}  "
+                  f"{dt:.0f}s elapsed, eta {eta:.0f}s", flush=True)
+
+    if _pool is not None:
+        _pool.close()
+        _pool.join()
+    if _gpu_thread_pool is not None:
+        _gpu_thread_pool.shutdown(wait=False)
+
+    n_fail = n_fail_cert + n_fail_sfun
+    n_sfun_total = n_fail_sfun + n_surv_sfun
+    ci_low, ci_high = _wilson_interval(n_fail, n_sample)
+    result = {
+        "p_fail": n_fail / n_sample,
+        "ci95": [ci_low, ci_high],
+        "n_sample": n_sample,
+        "n_fail": n_fail,
+        "n_fail_certified": n_fail_cert,
+        "n_fail_sfun": n_fail_sfun,
+        "n_upper_certified": n_upper_cert,
+        "n_sfun": n_sfun_total,
+        "free_frac": 1.0 - n_sfun_total / n_sample,
+        "n_refs_upper": int(len(refs_mat_upper)),
+        "n_refs_lower": int(len(refs_mat_lower)),
+        "n_cuts": len(lower_cuts),
+        "seed": seed,
+        "elapsed_sec": round(time.perf_counter() - t0, 3),
+        "t_sfun_sec": round(t_sfun, 3),
+    }
+    if output_dir is not None:
+        with open(os.path.join(output_dir, json_name), "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=4)
+    return result
 

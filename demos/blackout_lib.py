@@ -105,6 +105,37 @@ def build_model(dataset, device, threshold, alpha):
     return probs, row_names, n_state, sfun, model_info
 
 
+def load_checkpoint(out: Path, device):
+    """Load the references + cuts last checkpointed in `out` by a previous run
+    (refs_up_1.json/.pt, refs_low_0.json/.pt, failure_cuts_0.pkl).
+
+    Returns a dict with refs_upper/refs_lower (rule dicts), refs_mat_upper/
+    refs_mat_lower (tensors on `device`, None when absent) and cuts (list).
+    """
+    ck = {"refs_upper": [], "refs_lower": [],
+          "refs_mat_upper": None, "refs_mat_lower": None, "cuts": []}
+    cuts_pkl = out / "failure_cuts_0.pkl"
+    if cuts_pkl.exists():
+        import pickle
+        with open(cuts_pkl, "rb") as f:
+            ck["cuts"] = pickle.load(f)
+
+    def _load_dicts(p):  # json stores (op, state) as [op, state]; restore tuples
+        with open(p) as f:
+            return [{k: (tuple(v) if isinstance(v, list) else v)
+                     for k, v in d.items()} for d in json.load(f)]
+
+    up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"
+    low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"
+    if up_pt.exists() and up_json.exists():
+        ck["refs_upper"] = _load_dicts(up_json)
+        ck["refs_mat_upper"] = torch.load(up_pt, weights_only=True).to(device)
+        if low_pt.exists() and low_json.exists():
+            ck["refs_lower"] = _load_dicts(low_json)
+            ck["refs_mat_lower"] = torch.load(low_pt, weights_only=True).to(device)
+    return ck
+
+
 def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
             max_search_loops, max_rounds, max_refs, n_sample, batch, multi_devices, n_workers, quiet,
             coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
@@ -127,25 +158,13 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
     refs_mat_upper, refs_mat_lower = None, None
     lower_cuts = list(initial_cuts) if initial_cuts else None
     if resume:
-        cuts_pkl = out / "failure_cuts_0.pkl"
-        if cuts_pkl.exists():
-            import pickle
-            with open(cuts_pkl, "rb") as f:
-                resumed = pickle.load(f)
-            lower_cuts = resumed + (lower_cuts or [])
-            print(f"Resuming with {len(resumed)} failure cuts from {cuts_pkl}")
-        up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"
-        low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"
-        if up_pt.exists() and up_json.exists():
-            def _load_dicts(p):  # json stores (op, state) as [op, state]; restore tuples
-                with open(p) as f:
-                    return [{k: (tuple(v) if isinstance(v, list) else v)
-                             for k, v in d.items()} for d in json.load(f)]
-            refs_upper = _load_dicts(up_json)
-            refs_mat_upper = torch.load(up_pt, weights_only=True).to(probs.device)
-            if low_pt.exists() and low_json.exists():
-                refs_lower = _load_dicts(low_json)
-                refs_mat_lower = torch.load(low_pt, weights_only=True).to(probs.device)
+        ck = load_checkpoint(out, probs.device)
+        if ck["cuts"]:
+            lower_cuts = ck["cuts"] + (lower_cuts or [])
+            print(f"Resuming with {len(ck['cuts'])} failure cuts from {out / 'failure_cuts_0.pkl'}")
+        if ck["refs_mat_upper"] is not None:
+            refs_upper, refs_mat_upper = ck["refs_upper"], ck["refs_mat_upper"]
+            refs_lower, refs_mat_lower = ck["refs_lower"], ck["refs_mat_lower"]
             print(f"Resuming from checkpoint in {out}: "
                   f"{len(refs_upper)} survival + {len(refs_lower)} failure references")
         else:
@@ -286,6 +305,48 @@ def print_report(res, reliability, crit, cutsets, out: Path, ref_pf):
               f"(min size {c['min_cutset_size']}){tag}")
     print(f"\n  Saved: {out/'reliability.json'}")
     print(f"         {out/'critical_components.csv'}")
+
+
+def hybrid_estimate(sfun, probs, row_names, n_state, out: Path, *,
+                    n_sample, batch, multi_devices, n_workers, ref_pf, seed=None):
+    """Hybrid MC phase: the checkpointed rules classify samples for free,
+    sfun evaluates only the residual unknowns -> unbiased P(blackout) + 95% CI.
+
+    Complements the rigorous-but-wide bounds from rule extraction; writes
+    hybrid.json next to reliability.json in `out`.
+    """
+    ck = load_checkpoint(out, probs.device)
+    if ck["refs_mat_upper"] is None and not ck["cuts"]:
+        raise typer.BadParameter(
+            f"--hybrid needs a rule checkpoint in {out} (run an extraction first)")
+    n_up = 0 if ck["refs_mat_upper"] is None else len(ck["refs_mat_upper"])
+    n_low = 0 if ck["refs_mat_lower"] is None else len(ck["refs_mat_lower"])
+    print(f"\nHybrid estimate: {n_sample:,} MC samples against "
+          f"{n_up} survival + {n_low} failure rules + {len(ck['cuts'])} cuts ...\n",
+          flush=True)
+    res = rsr.run_hybrid_estimate(
+        sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1,
+        refs_mat_upper=ck["refs_mat_upper"], refs_mat_lower=ck["refs_mat_lower"],
+        lower_cuts=ck["cuts"],
+        n_sample=n_sample, sample_batch_size=batch,
+        n_workers=n_workers, devices=multi_devices,
+        seed=seed, output_dir=str(out))
+    lo, hi = res["ci95"]
+    print("\n" + "=" * 64)
+    print("HYBRID ESTIMATE (rules + Monte Carlo on the residual)")
+    print("=" * 64)
+    print(f"  P(blackout):        {res['p_fail']:.3e}   "
+          f"(95% CI [{lo:.3e}, {hi:.3e}], {res['n_fail']:,} failures)")
+    print(f"  Reference (paper):  p_f ~ {ref_pf:.1e}")
+    print(f"  Free classification: {res['free_frac'] * 100:.1f}% of samples "
+          f"({res['n_sfun']:,} sfun calls for the rest)")
+    print(f"  Failures:           {res['n_fail_certified']:,} rule-certified "
+          f"+ {res['n_fail_sfun']:,} from sfun")
+    print(f"  Runtime:            {res['elapsed_sec']:.1f}s "
+          f"(sfun {res['t_sfun_sec']:.1f}s)")
+    print(f"\n  Saved: {out/'hybrid.json'}")
+    return res
     print(f"         {Path(res['refs_upper_path']).name} / "
           f"{Path(res['refs_lower_path']).name} (rule sets)")
 
@@ -423,7 +484,8 @@ def resolve_workers(n_workers: int):
 def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
         max_search_loops, max_rounds, max_refs, n_sample, batch, device, devices, n_workers, out, verbose, runs,
         coverage_aware=False, ca_n_seeds=8, ca_n_orders=4, ca_max_add=4, ca_failure_beta=0.0,
-        cert=False, sus_cuts=0, sus_runs=1, sus_p0=0.1, resume=False):
+        cert=False, sus_cuts=0, sus_runs=1, sus_p0=0.1, resume=False,
+        hybrid=0, hybrid_only=False, hybrid_seed=None):
     """Full demo run: single detailed report (runs<=1) or multi-run summary."""
     dev, multi_devices, _ = resolve_devices(device, devices)
     n_workers = resolve_workers(n_workers)
@@ -437,6 +499,16 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
 
     # Build the model once (shared across all repetitions).
     probs, row_names, n_state, sfun, model_info = build_model(dataset, dev, threshold, alpha)
+
+    if hybrid_only:
+        # Skip extraction: run the hybrid MC estimate on the rules last
+        # checkpointed in `out` (e.g. by an earlier HPC extraction).
+        if hybrid <= 0:
+            raise typer.BadParameter("--hybrid-only requires --hybrid N")
+        hybrid_estimate(sfun, probs, row_names, n_state, out,
+                        n_sample=hybrid, batch=batch, multi_devices=multi_devices,
+                        n_workers=n_workers, ref_pf=ref_pf, seed=hybrid_seed)
+        return
 
     # LP-certificate generators: survival boxes + failure half-space cuts read
     # off single DC-OPF solves (see cert_lib.py); rsr verifies each box corner
@@ -481,9 +553,15 @@ def run(*, title, ref_pf, dataset, threshold, alpha, unk_thres, unk_opt,
         reliability, crit, cutsets = analyse(res, threshold, elapsed, ref_pf)
         save_artifacts(out, reliability, crit)
         print_report(res, reliability, crit, cutsets, out, ref_pf)
+        if hybrid > 0:
+            hybrid_estimate(sfun, probs, row_names, n_state, out,
+                            n_sample=hybrid, batch=batch, multi_devices=multi_devices,
+                            n_workers=n_workers, ref_pf=ref_pf, seed=hybrid_seed)
         return
 
     # ---- multi run: repeat and summarise metrics.json ----
+    if hybrid > 0:
+        print("  Note: --hybrid only applies to single runs (--runs 1); skipping it.")
     out.mkdir(parents=True, exist_ok=True)
     print(f"\nRepeating extraction x{runs} "
           f"(unknown gap < {unk_thres:g} [{unk_opt}], samples/round {n_sample:,})\n", flush=True)
@@ -546,6 +624,9 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
         sus_runs: int = typer.Option(1, help="Independent SuS repetitions (diversifies the failure modes found)"),
         sus_p0: float = typer.Option(0.1, help="SuS intermediate conditional probability"),
         resume: bool = typer.Option(False, "--resume", help="Warm-start from references last checkpointed in --out (continue a run killed by walltime)"),
+        hybrid: int = typer.Option(0, "--hybrid", help="After extraction: unbiased MC estimate of P(blackout) with this many samples — the rules classify most samples for free, sfun evaluates only the residual unknowns; reports a 95% CI (0 = off)"),
+        hybrid_only: bool = typer.Option(False, "--hybrid-only", help="Skip extraction; run the --hybrid estimate directly on the rules last checkpointed in --out"),
+        hybrid_seed: int = typer.Option(-1, help="RNG seed for the hybrid estimate (-1 = don't seed)"),
     ):
         """Estimate P(blackout) and the critical failure modes for this grid."""
         run(title=title, ref_pf=ref_pf, dataset=dataset, threshold=threshold, alpha=alpha,
@@ -555,6 +636,8 @@ def build_app(*, title, ref_pf, default_dataset, default_out, default_threshold,
             verbose=verbose, runs=runs, coverage_aware=coverage_aware,
             ca_n_seeds=ca_n_seeds, ca_n_orders=ca_n_orders, ca_max_add=ca_max_add,
             ca_failure_beta=ca_failure_beta, cert=cert,
-            sus_cuts=sus_cuts, sus_runs=sus_runs, sus_p0=sus_p0, resume=resume)
+            sus_cuts=sus_cuts, sus_runs=sus_runs, sus_p0=sus_p0, resume=resume,
+            hybrid=hybrid, hybrid_only=hybrid_only,
+            hybrid_seed=None if hybrid_seed < 0 else hybrid_seed)
 
     return app
