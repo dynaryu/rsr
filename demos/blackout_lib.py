@@ -105,12 +105,15 @@ def build_model(dataset, device, threshold, alpha):
     return probs, row_names, n_state, sfun, model_info
 
 
-def load_checkpoint(out: Path, device):
+def load_checkpoint(out: Path, device, row_names=None):
     """Load the references + cuts last checkpointed in `out` by a previous run
     (refs_up_1.json/.pt, refs_low_0.json/.pt, failure_cuts_0.pkl).
 
     Returns a dict with refs_upper/refs_lower (rule dicts), refs_mat_upper/
     refs_mat_lower (tensors on `device`, None when absent) and cuts (list).
+    `row_names` enables rebuilding the rule dicts from the binary tensors
+    when the JSON is missing or stale (intra-run checkpoints are
+    binary-only; JSON is written once at the end of a run).
     """
     ck = {"refs_upper": [], "refs_lower": [],
           "refs_mat_upper": None, "refs_mat_lower": None, "cuts": []}
@@ -125,14 +128,31 @@ def load_checkpoint(out: Path, device):
             return [{k: (tuple(v) if isinstance(v, list) else v)
                      for k, v in d.items()} for d in json.load(f)]
 
+    def _load_side(json_path, pt_path, op, sys_st):
+        """(dicts, mat). Intra-run checkpoints only write the binary .pt
+        (JSON lands once at the end of a run), so when the JSON is missing
+        or stale — e.g. resuming a walltime-killed run — the dicts are
+        rebuilt from the matrix."""
+        if not pt_path.exists():
+            return [], None
+        mat = torch.load(pt_path, weights_only=True).to(device)
+        dicts = _load_dicts(json_path) if json_path.exists() else []
+        if len(dicts) != len(mat):
+            if row_names is None:
+                raise ValueError(
+                    f"{pt_path.name} has {len(mat)} rules but the JSON has "
+                    f"{len(dicts)}; pass row_names to load_checkpoint so the "
+                    "rule dicts can be rebuilt from the binary tensor")
+            dicts = rsr.refs_dicts_from_mat(mat, row_names, op, sys_st)
+            print(f"  checkpoint {pt_path.name}: rebuilt {len(dicts)} rule "
+                  f"dicts from the binary tensor (JSON absent or stale)")
+        return dicts, mat
+
     up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"
     low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"
-    if up_pt.exists() and up_json.exists():
-        ck["refs_upper"] = _load_dicts(up_json)
-        ck["refs_mat_upper"] = torch.load(up_pt, weights_only=True).to(device)
-        if low_pt.exists() and low_json.exists():
-            ck["refs_lower"] = _load_dicts(low_json)
-            ck["refs_mat_lower"] = torch.load(low_pt, weights_only=True).to(device)
+    if up_pt.exists():
+        ck["refs_upper"], ck["refs_mat_upper"] = _load_side(up_json, up_pt, '>=', 1)
+        ck["refs_lower"], ck["refs_mat_lower"] = _load_side(low_json, low_pt, '<=', 0)
     return ck
 
 
@@ -158,7 +178,7 @@ def extract(sfun, probs, row_names, n_state, out: Path, *, unk_thres, unk_opt,
     refs_mat_upper, refs_mat_lower = None, None
     lower_cuts = list(initial_cuts) if initial_cuts else None
     if resume:
-        ck = load_checkpoint(out, probs.device)
+        ck = load_checkpoint(out, probs.device, row_names)
         if ck["cuts"]:
             lower_cuts = ck["cuts"] + (lower_cuts or [])
             print(f"Resuming with {len(ck['cuts'])} failure cuts from {out / 'failure_cuts_0.pkl'}")
@@ -315,7 +335,7 @@ def hybrid_estimate(sfun, probs, row_names, n_state, out: Path, *,
     Complements the rigorous-but-wide bounds from rule extraction; writes
     hybrid.json next to reliability.json in `out`.
     """
-    ck = load_checkpoint(out, probs.device)
+    ck = load_checkpoint(out, probs.device, row_names)
     if ck["refs_mat_upper"] is None and not ck["cuts"]:
         raise typer.BadParameter(
             f"--hybrid needs a rule checkpoint in {out} (run an extraction first)")

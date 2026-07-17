@@ -1465,3 +1465,44 @@ def test_extraction_multi_device_with_initial_cuts(tmp_path):
     # the cut certifies exactly the x0==0 failures (P = 0.1)
     assert last["p_lower"] == pytest.approx(0.1, abs=0.02)
     assert last["p_unknown"] <= 1e-3
+
+
+def test_refs_dicts_from_mat_roundtrip():
+    row_names = ['x1', 'x2', 'x3', 'x4']
+    n_state = 3
+    ups = [
+        {'x1': ('>=', 2), 'x3': ('>=', 1), 'sys': ('>=', 1)},
+        {'x2': ('>=', 1), 'sys': ('>=', 1)},
+    ]
+    lows = [
+        {'x1': ('<=', 0), 'x4': ('<=', 1), 'sys': ('<=', 0)},
+        {'x2': ('<=', 1), 'x3': ('<=', 0), 'sys': ('<=', 0)},
+    ]
+    m_up = torch.stack([rsr.from_ref_dict_to_mat(d, row_names, n_state, device='cpu')
+                        for d in ups])
+    m_low = torch.stack([rsr.from_ref_dict_to_mat(d, row_names, n_state, device='cpu')
+                         for d in lows])
+    assert rsr.refs_dicts_from_mat(m_up, row_names, '>=', 1) == ups
+    assert rsr.refs_dicts_from_mat(m_low, row_names, '<=', 0) == lows
+    assert rsr.refs_dicts_from_mat(torch.zeros(0), row_names, '>=', 1) == []
+
+
+def test_checkpoint_reconstruction_matches_final_json(tmp_path):
+    # Intra-run checkpoints are binary-only; --resume rebuilds rule dicts
+    # from the .pt via refs_dicts_from_mat. The reconstruction must agree
+    # with the JSON the run writes at the end (same rules, same order).
+    import json as _json
+    probs, row_names, n_state, sfun = _hybrid_problem()
+    res = rsr.run_ref_extraction_by_mcs(
+        sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, unk_prob_thres=5e-3, unk_prob_opt="abs",
+        n_sample=20_000, sample_batch_size=5_000, max_rounds=60,
+        n_workers=1, output_dir=str(tmp_path))
+    for path_key, pt_key, op, sys_st in [
+            ("refs_upper_path", "refs_upper_pt_path", '>=', 1),
+            ("refs_lower_path", "refs_lower_pt_path", '<=', 0)]:
+        with open(res[path_key]) as f:
+            dicts_json = [{k: tuple(v) for k, v in d.items()}
+                          for d in _json.load(f)]
+        mat = torch.load(res[pt_key], weights_only=True)
+        assert rsr.refs_dicts_from_mat(mat, row_names, op, sys_st) == dicts_json

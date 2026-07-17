@@ -799,6 +799,43 @@ def from_ref_dict_to_mat(ref_dict, row_names, max_st, device=None):
 
     return mat
 
+def refs_dicts_from_mat(refs_mat, row_names, op, sys_st):
+    """Reconstruct reference dicts from their matrix representation.
+
+    Inverse of stacking :func:`from_ref_dict_to_mat` rows, for the pure-'>='
+    (upper) / pure-'<=' (lower) references the extraction loop produces: a
+    component is conditioned iff its row is not all-ones; for '>=' the
+    reference state is the first allowed one, for '<=' the last. The 'sys'
+    entry is re-added as ``(op, sys_st)``.
+
+    This makes the JSON form of a checkpoint redundant: intra-run
+    checkpoints only write the fast binary ``.pt`` tensors (dumping ~1e5
+    long rules as JSON costs minutes per save), and ``--resume`` rebuilds
+    the dicts from the matrices with this function when the JSON is missing
+    or stale.
+    """
+    mat = refs_mat.detach().to('cpu')
+    if mat.ndim != 3 or mat.shape[0] == 0:
+        return []
+    n_state = mat.shape[-1]
+    b = mat != 0
+    conditioned = ~b.all(dim=2)                       # (n_refs, n_var)
+    if op == '>=':
+        states = b.to(torch.int8).argmax(dim=2)       # first allowed state
+    elif op == '<=':
+        states = (n_state - 1) - b.flip(-1).to(torch.int8).argmax(dim=2)
+    else:
+        raise ValueError(f"op must be '>=' or '<=', got {op!r}")
+    dicts = [{} for _ in range(mat.shape[0])]
+    idx = conditioned.nonzero()
+    sts = states[conditioned].tolist()
+    for (ri, ci), s in zip(idx.tolist(), sts):
+        dicts[ri][row_names[ci]] = (op, int(s))
+    for d in dicts:
+        d['sys'] = (op, sys_st)
+    return dicts
+
+
 def from_Bbound_to_comps_st(Bbound, row_names):
     """
     Extracts the index of the first non-zero state for each component (ignoring the system row).
@@ -2613,8 +2650,10 @@ def run_ref_extraction_by_mcs(
                 with open(metrics_path, "a", encoding="utf-8") as mf:
                     for e in metrics_log[-save_every:]:
                         mf.write(json.dumps(e) + "\n")
-                _save_json(refs_upper, refs_upper_path)
-                _save_json(refs_lower, refs_lower_path)
+                # intra-run checkpoints are binary-only: JSON of large rule
+                # sets is minutes per dump (see refs_dicts_from_mat) and is
+                # reconstructable from the .pt, so it is written once at the
+                # end of the run
                 _save_pt(refs_mat_upper, refs_upper_pt_path)
                 _save_pt(refs_mat_lower, refs_lower_pt_path)
                 _save_cuts()
@@ -2870,8 +2909,7 @@ def run_ref_extraction_by_mcs(
             with open(metrics_path, "a", encoding="utf-8") as mf:
                 for e in metrics_log[-save_every:]:
                     mf.write(json.dumps(e) + "\n")
-            _save_json(refs_upper, refs_upper_path)
-            _save_json(refs_lower, refs_lower_path)
+            # binary-only intra-run checkpoint (JSON written once at the end)
             _save_pt(refs_mat_upper, refs_upper_pt_path)
             _save_pt(refs_mat_lower, refs_lower_pt_path)
             _save_cuts()
