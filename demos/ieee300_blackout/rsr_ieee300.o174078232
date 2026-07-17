@@ -1,0 +1,15 @@
+Job 174078232.gadi-pbs on gadi-gpu-v100-0105.gadi.nci.org.au: GPUs=[none] NCPUS=24
+
+======================================================================================
+                  Resource Usage on 2026-07-18 02:09:47:
+   Job Id:             174078232.gadi-pbs
+   Project:            n74
+   Exit Status:        -29 (Job failed due to exceeding walltime)
+   Service Units:      288.60
+   NCPUs Requested:    24                  CPU Time Used: 08:37:42        
+   Memory Requested:   191.0GB               Memory Used: 16.72GB         
+   NGPUs Requested:    2                 GPU Utilisation: 0%              
+                                         GPU Memory Used: 63.39GB         
+   Walltime Requested: 04:00:00            Walltime Used: 04:00:30        
+   JobFS Requested:    12.0GB                 JobFS Used: 0B              
+======================================================================================
