@@ -13,6 +13,7 @@ import psutil
 
 import random
 import multiprocessing as mp
+import threading
 from collections import deque
 
 import rsr
@@ -2376,18 +2377,23 @@ def run_ref_extraction_by_mcs(
     cuts_pkl_path = os.path.join(output_dir, cuts_pkl_name)
 
     _cut_compiled = {"n": -1, "eval": None}
+    _cut_compile_lock = threading.Lock()
 
     def _cut_fn(samples):
         """(B,) bool: samples certified failed by the accumulated dual cuts.
 
         Evaluates through a compiled batch evaluator (one matmul + one
         scatter-add for all cuts; see :func:`_compile_cuts`), recompiled
-        whenever cuts are added. Thread-safe for the multi-GPU path: the
-        evaluator caches per-device tensor copies internally.
+        whenever cuts are added. The multi-GPU threads share this closure,
+        so the recompile check is double-checked-locked and the evaluator
+        is published before the cut count — otherwise a second thread can
+        observe the count already updated and call a still-None evaluator.
         """
-        if _cut_compiled["n"] != len(lower_cuts):
-            _cut_compiled["n"] = len(lower_cuts)
-            _cut_compiled["eval"] = _compile_cuts(lower_cuts, name_pos, n_state)
+        if _cut_compiled["n"] != len(lower_cuts) or _cut_compiled["eval"] is None:
+            with _cut_compile_lock:
+                if _cut_compiled["n"] != len(lower_cuts) or _cut_compiled["eval"] is None:
+                    _cut_compiled["eval"] = _compile_cuts(lower_cuts, name_pos, n_state)
+                    _cut_compiled["n"] = len(lower_cuts)
         return _cut_compiled["eval"](samples)
 
     def _classify_counts(s):

@@ -1447,3 +1447,21 @@ def test_hybrid_estimate_parallel_matches_serial():
     res2 = rsr.run_hybrid_estimate(n_workers=2, **kwargs)
     assert res1['p_fail'] == res2['p_fail']
     assert res1['n_fail'] == res2['n_fail']
+
+
+def test_extraction_multi_device_with_initial_cuts(tmp_path):
+    # Regression: NCI 2-GPU resume crashed with "'NoneType' object is not
+    # callable" — both sampling threads hit the shared _cut_fn on round 1 and
+    # one observed the compile cache half-published. Drive the multi-device
+    # path (two 'cpu' devices) with cuts present from the start.
+    probs, row_names, n_state, sfun = _hybrid_problem()
+    res = rsr.run_ref_extraction_by_mcs(
+        sfun=sfun, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, lower_cuts=[_StubCutX0()],
+        unk_prob_thres=1e-3, unk_prob_opt="abs",
+        n_sample=20_000, sample_batch_size=2_000, max_rounds=50,
+        n_workers=1, devices=['cpu', 'cpu'], output_dir=str(tmp_path))
+    last = res["metrics_log"][-1]
+    # the cut certifies exactly the x0==0 failures (P = 0.1)
+    assert last["p_lower"] == pytest.approx(0.1, abs=0.02)
+    assert last["p_unknown"] <= 1e-3
