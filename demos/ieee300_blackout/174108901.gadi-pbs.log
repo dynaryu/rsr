@@ -1,0 +1,455 @@
+================================================================
+RSR demo — IEEE 300-bus DC-OPF blackout reliability
+================================================================
+  Resources:   GPUs=cuda:0,cuda:1  CPU workers=48  (visible: 2 GPU, 24 CPU)
+  Dataset:     /scratch/n74/hxr547/rsr/demos/ieee300_blackout/../../../network-datasets/datasets/ieee300/v1
+  Components:  711 (69 generator buses, 231 ordinary buses, 411 branches)
+  Max states:  4   Device: cuda:0
+  Threshold:   26.1% blackout → system failure
+DC-OPF sfun ready: 300 buses, 69 generators, 411 branches
+  All operational: blackout=  0.07%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:652 in main                    │
+│                                                                              │
+│   649 │   │   hybrid_seed: int = typer.Option(-1, help="RNG seed for the hyb │
+│   650 │   ):                                                                 │
+│   651 │   │   """Estimate P(blackout) and the critical failure modes for thi │
+│ ❱ 652 │   │   run(title=title, ref_pf=ref_pf, dataset=dataset, threshold=thr │
+│   653 │   │   │   unk_thres=unk_thres, unk_opt=unk_opt, max_search_loops=max │
+│   654 │   │   │   max_rounds=max_rounds, max_refs=max_refs, n_sample=n_sampl │
+│   655 │   │   │   batch=batch, device=device, devices=devices, n_workers=n_w │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │            alpha = 2.0                                                   │ │
+│ │            batch = 100000                                                │ │
+│ │  ca_failure_beta = 0.0                                                   │ │
+│ │       ca_max_add = 4                                                     │ │
+│ │      ca_n_orders = 4                                                     │ │
+│ │       ca_n_seeds = 8                                                     │ │
+│ │             cert = False                                                 │ │
+│ │   coverage_aware = False                                                 │ │
+│ │          dataset = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_bla… │ │
+│ │           device = ''                                                    │ │
+│ │          devices = 'auto'                                                │ │
+│ │           hybrid = 10000000                                              │ │
+│ │      hybrid_only = True                                                  │ │
+│ │      hybrid_seed = 42                                                    │ │
+│ │         max_refs = 0                                                     │ │
+│ │       max_rounds = 100000                                                │ │
+│ │ max_search_loops = 500000                                                │ │
+│ │         n_sample = 10000000                                              │ │
+│ │        n_workers = 48                                                    │ │
+│ │              out = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_bla… │ │
+│ │           ref_pf = 0.0001                                                │ │
+│ │           resume = False                                                 │ │
+│ │             runs = 1                                                     │ │
+│ │         sus_cuts = 0                                                     │ │
+│ │           sus_p0 = 0.1                                                   │ │
+│ │         sus_runs = 1                                                     │ │
+│ │        threshold = 26.1                                                  │ │
+│ │            title = 'IEEE 300-bus DC-OPF blackout reliability'            │ │
+│ │          unk_opt = 'abs'                                                 │ │
+│ │        unk_thres = 1e-06                                                 │ │
+│ │          verbose = False                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:528 in run                     │
+│                                                                              │
+│   525 │   │   # checkpointed in `out` (e.g. by an earlier HPC extraction).   │
+│   526 │   │   if hybrid <= 0:                                                │
+│   527 │   │   │   raise typer.BadParameter("--hybrid-only requires --hybrid  │
+│ ❱ 528 │   │   hybrid_estimate(sfun, probs, row_names, n_state, out,          │
+│   529 │   │   │   │   │   │   n_sample=hybrid, batch=batch, multi_devices=mu │
+│   530 │   │   │   │   │   │   n_workers=n_workers, ref_pf=ref_pf, seed=hybri │
+│   531 │   │   return                                                         │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │                _ = ['cuda:0', 'cuda:1']                                  │ │
+│ │            alpha = 2.0                                                   │ │
+│ │            batch = 100000                                                │ │
+│ │  ca_failure_beta = 0.0                                                   │ │
+│ │       ca_max_add = 4                                                     │ │
+│ │      ca_n_orders = 4                                                     │ │
+│ │       ca_n_seeds = 8                                                     │ │
+│ │             cert = False                                                 │ │
+│ │   coverage_aware = False                                                 │ │
+│ │          dataset = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_bla… │ │
+│ │              dev = device(type='cuda', index=0)                          │ │
+│ │           device = ''                                                    │ │
+│ │          devices = 'auto'                                                │ │
+│ │          gpu_str = 'cuda:0,cuda:1'                                       │ │
+│ │           hybrid = 10000000                                              │ │
+│ │      hybrid_only = True                                                  │ │
+│ │      hybrid_seed = 42                                                    │ │
+│ │         max_refs = 0                                                     │ │
+│ │       max_rounds = 100000                                                │ │
+│ │ max_search_loops = 500000                                                │ │
+│ │       model_info = {                                                     │ │
+│ │                    │   'case_path':                                      │ │
+│ │                    '/scratch/n74/hxr547/rsr/demos/ieee300_blackout/../.… │ │
+│ │                    │   'probs_dict': {                                   │ │
+│ │                    │   │   'vbus1': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus2': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus3': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus4': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus5': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus6': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus7': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus8': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.19},                         │ │
+│ │                    │   │   │   '2': {'p': 0.3},                          │ │
+│ │                    │   │   │   '3': {'p': 0.5}                           │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus9': {                                    │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.99}                          │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   'vbus10': {                                   │ │
+│ │                    │   │   │   '0': {'p': 0.01},                         │ │
+│ │                    │   │   │   '1': {'p': 0.19},                         │ │
+│ │                    │   │   │   '2': {'p': 0.3},                          │ │
+│ │                    │   │   │   '3': {'p': 0.5}                           │ │
+│ │                    │   │   },                                            │ │
+│ │                    │   │   ... +701                                      │ │
+│ │                    │   },                                                │ │
+│ │                    │   'dcopt': <function make_dcopt_sfun.<locals>.sfun  │ │
+│ │                    at 0x149ad4ed40e0>                                    │ │
+│ │                    }                                                     │ │
+│ │    multi_devices = ['cuda:0', 'cuda:1']                                  │ │
+│ │         n_sample = 10000000                                              │ │
+│ │          n_state = 4                                                     │ │
+│ │        n_workers = 48                                                    │ │
+│ │              out = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_bla… │ │
+│ │            probs = tensor([[0.0100, 0.9900, 0.0000, 0.0000],             │ │
+│ │                    │   │   [0.0100, 0.9900, 0.0000, 0.0000],             │ │
+│ │                    │   │   [0.0100, 0.9900, 0.0000, 0.0000],             │ │
+│ │                    │   │   ...,                                          │ │
+│ │                    │   │   [0.0100, 0.9900, 0.0000, 0.0000],             │ │
+│ │                    │   │   [0.0100, 0.9900, 0.0000, 0.0000],             │ │
+│ │                    │   │   [0.0100, 0.9900, 0.0000, 0.0000]],            │ │
+│ │                    device='cuda:0')                                      │ │
+│ │           ref_pf = 0.0001                                                │ │
+│ │           resume = False                                                 │ │
+│ │        row_names = [                                                     │ │
+│ │                    │   'vbus1',                                          │ │
+│ │                    │   'vbus2',                                          │ │
+│ │                    │   'vbus3',                                          │ │
+│ │                    │   'vbus4',                                          │ │
+│ │                    │   'vbus5',                                          │ │
+│ │                    │   'vbus6',                                          │ │
+│ │                    │   'vbus7',                                          │ │
+│ │                    │   'vbus8',                                          │ │
+│ │                    │   'vbus9',                                          │ │
+│ │                    │   'vbus10',                                         │ │
+│ │                    │   ... +701                                          │ │
+│ │                    ]                                                     │ │
+│ │             runs = 1                                                     │ │
+│ │         sus_cuts = 0                                                     │ │
+│ │           sus_p0 = 0.1                                                   │ │
+│ │         sus_runs = 1                                                     │ │
+│ │        threshold = 26.1                                                  │ │
+│ │            title = 'IEEE 300-bus DC-OPF blackout reliability'            │ │
+│ │          unk_opt = 'abs'                                                 │ │
+│ │        unk_thres = 1e-06                                                 │ │
+│ │          verbose = False                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:338 in hybrid_estimate         │
+│                                                                              │
+│   335 │   Complements the rigorous-but-wide bounds from rule extraction; wri │
+│   336 │   hybrid.json next to reliability.json in `out`.                     │
+│   337 │   """                                                                │
+│ ❱ 338 │   ck = load_checkpoint(out, probs.device, row_names)                 │
+│   339 │   if ck["refs_mat_upper"] is None and not ck["cuts"]:                │
+│   340 │   │   raise typer.BadParameter(                                      │
+│   341 │   │   │   f"--hybrid needs a rule checkpoint in {out} (run an extrac │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │         batch = 100000                                                   │ │
+│ │ multi_devices = ['cuda:0', 'cuda:1']                                     │ │
+│ │      n_sample = 10000000                                                 │ │
+│ │       n_state = 4                                                        │ │
+│ │     n_workers = 48                                                       │ │
+│ │           out = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blacko… │ │
+│ │         probs = tensor([[0.0100, 0.9900, 0.0000, 0.0000],                │ │
+│ │                 │   │   [0.0100, 0.9900, 0.0000, 0.0000],                │ │
+│ │                 │   │   [0.0100, 0.9900, 0.0000, 0.0000],                │ │
+│ │                 │   │   ...,                                             │ │
+│ │                 │   │   [0.0100, 0.9900, 0.0000, 0.0000],                │ │
+│ │                 │   │   [0.0100, 0.9900, 0.0000, 0.0000],                │ │
+│ │                 │   │   [0.0100, 0.9900, 0.0000, 0.0000]],               │ │
+│ │                 device='cuda:0')                                         │ │
+│ │        ref_pf = 0.0001                                                   │ │
+│ │     row_names = [                                                        │ │
+│ │                 │   'vbus1',                                             │ │
+│ │                 │   'vbus2',                                             │ │
+│ │                 │   'vbus3',                                             │ │
+│ │                 │   'vbus4',                                             │ │
+│ │                 │   'vbus5',                                             │ │
+│ │                 │   'vbus6',                                             │ │
+│ │                 │   'vbus7',                                             │ │
+│ │                 │   'vbus8',                                             │ │
+│ │                 │   'vbus9',                                             │ │
+│ │                 │   'vbus10',                                            │ │
+│ │                 │   ... +701                                             │ │
+│ │                 ]                                                        │ │
+│ │          seed = 42                                                       │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:154 in load_checkpoint         │
+│                                                                              │
+│   151 │   up_json, up_pt = out / "refs_up_1.json", out / "refs_up_1.pt"      │
+│   152 │   low_json, low_pt = out / "refs_low_0.json", out / "refs_low_0.pt"  │
+│   153 │   if up_pt.exists():                                                 │
+│ ❱ 154 │   │   ck["refs_upper"], ck["refs_mat_upper"] = _load_side(up_json, u │
+│   155 │   │   ck["refs_lower"], ck["refs_mat_lower"] = _load_side(low_json,  │
+│   156 │   return ck                                                          │
+│   157                                                                        │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │        ck = {                                                            │ │
+│ │             │   'refs_upper': [],                                        │ │
+│ │             │   'refs_lower': [],                                        │ │
+│ │             │   'refs_mat_upper': None,                                  │ │
+│ │             │   'refs_mat_lower': None,                                  │ │
+│ │             │   'cuts': [                                                │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad57d6bd0>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4ef27e0>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4ef4f50>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4ef7b90>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4eea840>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4f00ce0>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4f03770>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4f05a60>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4f07f80>,      │ │
+│ │             │   │   <cert_lib.FailureCut object at 0x149ad4f13050>,      │ │
+│ │             │   │   ... +7                                               │ │
+│ │             │   ]                                                        │ │
+│ │             }                                                            │ │
+│ │  cuts_pkl = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │    device = device(type='cuda', index=0)                                 │ │
+│ │         f = <_io.BufferedReader                                          │ │
+│ │             name='/scratch/n74/hxr547/rsr/demos/ieee300_blackout/out_ce… │ │
+│ │  low_json = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │    low_pt = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │       out = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │    pickle = <module 'pickle' from                                        │ │
+│ │             '/apps/python3/3.12.1/lib/python3.12/pickle.py'>             │ │
+│ │ row_names = [                                                            │ │
+│ │             │   'vbus1',                                                 │ │
+│ │             │   'vbus2',                                                 │ │
+│ │             │   'vbus3',                                                 │ │
+│ │             │   'vbus4',                                                 │ │
+│ │             │   'vbus5',                                                 │ │
+│ │             │   'vbus6',                                                 │ │
+│ │             │   'vbus7',                                                 │ │
+│ │             │   'vbus8',                                                 │ │
+│ │             │   'vbus9',                                                 │ │
+│ │             │   'vbus10',                                                │ │
+│ │             │   ... +701                                                 │ │
+│ │             ]                                                            │ │
+│ │   up_json = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │     up_pt = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:139 in _load_side              │
+│                                                                              │
+│   136 │   │   if not pt_path.exists():                                       │
+│   137 │   │   │   return [], None                                            │
+│   138 │   │   mat = torch.load(pt_path, weights_only=True).to(device)        │
+│ ❱ 139 │   │   dicts = _load_dicts(json_path) if json_path.exists() else []   │
+│   140 │   │   if len(dicts) != len(mat):                                     │
+│   141 │   │   │   if row_names is None:                                      │
+│   142 │   │   │   │   raise ValueError(                                      │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │    device = device(type='cuda', index=0)                                 │ │
+│ │ json_path = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │       mat = tensor([[[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [1, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]],                                      │ │
+│ │             │   │                                                        │ │
+│ │             │   │   [[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]],                                      │ │
+│ │             │   │                                                        │ │
+│ │             │   │   [[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]],                                      │ │
+│ │             │   │                                                        │ │
+│ │             │   │   ...,                                                 │ │
+│ │             │   │                                                        │ │
+│ │             │   │   [[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]],                                      │ │
+│ │             │   │                                                        │ │
+│ │             │   │   [[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]],                                      │ │
+│ │             │   │                                                        │ │
+│ │             │   │   [[0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    ...,                                                │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1],                                       │ │
+│ │             │   │    [0, 1, 1, 1]]], device='cuda:0', dtype=torch.int32) │ │
+│ │        op = '>='                                                         │ │
+│ │   pt_path = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/o… │ │
+│ │ row_names = [                                                            │ │
+│ │             │   'vbus1',                                                 │ │
+│ │             │   'vbus2',                                                 │ │
+│ │             │   'vbus3',                                                 │ │
+│ │             │   'vbus4',                                                 │ │
+│ │             │   'vbus5',                                                 │ │
+│ │             │   'vbus6',                                                 │ │
+│ │             │   'vbus7',                                                 │ │
+│ │             │   'vbus8',                                                 │ │
+│ │             │   'vbus9',                                                 │ │
+│ │             │   'vbus10',                                                │ │
+│ │             │   ... +701                                                 │ │
+│ │             ]                                                            │ │
+│ │    sys_st = 1                                                            │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /scratch/n74/hxr547/rsr/demos/blackout_lib.py:129 in _load_dicts             │
+│                                                                              │
+│   126 │   def _load_dicts(p):  # json stores (op, state) as [op, state]; res │
+│   127 │   │   with open(p) as f:                                             │
+│   128 │   │   │   return [{k: (tuple(v) if isinstance(v, list) else v)       │
+│ ❱ 129 │   │   │   │   │    for k, v in d.items()} for d in json.load(f)]     │
+│   130 │                                                                      │
+│   131 │   def _load_side(json_path, pt_path, op, sys_st):                    │
+│   132 │   │   """(dicts, mat). Intra-run checkpoints only write the binary . │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │ f = <_io.TextIOWrapper                                                   │ │
+│ │     name='/scratch/n74/hxr547/rsr/demos/ieee300_blackout/out_cert_nci/r… │ │
+│ │     mode='r' encoding='utf-8'>                                           │ │
+│ │ p = PosixPath('/scratch/n74/hxr547/rsr/demos/ieee300_blackout/out_cert_… │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /apps/python3/3.12.1/lib/python3.12/json/__init__.py:293 in load             │
+│                                                                              │
+│   290 │   To use a custom ``JSONDecoder`` subclass, specify it with the ``cl │
+│   291 │   kwarg; otherwise ``JSONDecoder`` is used.                          │
+│   292 │   """                                                                │
+│ ❱ 293 │   return loads(fp.read(),                                            │
+│   294 │   │   cls=cls, object_hook=object_hook,                              │
+│   295 │   │   parse_float=parse_float, parse_int=parse_int,                  │
+│   296 │   │   parse_constant=parse_constant, object_pairs_hook=object_pairs_ │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │               cls = None                                                 │ │
+│ │                fp = <_io.TextIOWrapper                                   │ │
+│ │                     name='/scratch/n74/hxr547/rsr/demos/ieee300_blackou… │ │
+│ │                     mode='r' encoding='utf-8'>                           │ │
+│ │                kw = {}                                                   │ │
+│ │       object_hook = None                                                 │ │
+│ │ object_pairs_hook = None                                                 │ │
+│ │    parse_constant = None                                                 │ │
+│ │       parse_float = None                                                 │ │
+│ │         parse_int = None                                                 │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /apps/python3/3.12.1/lib/python3.12/json/__init__.py:346 in loads            │
+│                                                                              │
+│   343 │   if (cls is None and object_hook is None and                        │
+│   344 │   │   │   parse_int is None and parse_float is None and              │
+│   345 │   │   │   parse_constant is None and object_pairs_hook is None and n │
+│ ❱ 346 │   │   return _default_decoder.decode(s)                              │
+│   347 │   if cls is None:                                                    │
+│   348 │   │   cls = JSONDecoder                                              │
+│   349 │   if object_hook is not None:                                        │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │               cls = None                                                 │ │
+│ │                kw = {}                                                   │ │
+│ │       object_hook = None                                                 │ │
+│ │ object_pairs_hook = None                                                 │ │
+│ │    parse_constant = None                                                 │ │
+│ │       parse_float = None                                                 │ │
+│ │         parse_int = None                                                 │ │
+│ │                 s = '[\n    {\n        "vbus8": [\n            ">=",\n   │ │
+│ │                     1\n        ],\n        "v'+2095549505                │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /apps/python3/3.12.1/lib/python3.12/json/decoder.py:337 in decode            │
+│                                                                              │
+│   334 │   │   containing a JSON document).                                   │
+│   335 │   │                                                                  │
+│   336 │   │   """                                                            │
+│ ❱ 337 │   │   obj, end = self.raw_decode(s, idx=_w(s, 0).end())              │
+│   338 │   │   end = _w(s, end).end()                                         │
+│   339 │   │   if end != len(s):                                              │
+│   340 │   │   │   raise JSONDecodeError("Extra data", s, end)                │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │   _w = <built-in method match of re.Pattern object at 0x149bf8f2e400>    │ │
+│ │    s = '[\n    {\n        "vbus8": [\n            ">=",\n            1\n │ │
+│ │        ],\n        "v'+2095549505                                        │ │
+│ │ self = <json.decoder.JSONDecoder object at 0x149bf8f5f2f0>               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ /apps/python3/3.12.1/lib/python3.12/json/decoder.py:353 in raw_decode        │
+│                                                                              │
+│   350 │   │                                                                  │
+│   351 │   │   """                                                            │
+│   352 │   │   try:                                                           │
+│ ❱ 353 │   │   │   obj, end = self.scan_once(s, idx)                          │
+│   354 │   │   except StopIteration as err:                                   │
+│   355 │   │   │   raise JSONDecodeError("Expecting value", s, err.value) fro │
+│   356 │   │   return obj, end                                                │
+│                                                                              │
+│ ╭───────────────────────────────── locals ─────────────────────────────────╮ │
+│ │  idx = 0                                                                 │ │
+│ │    s = '[\n    {\n        "vbus8": [\n            ">=",\n            1\n │ │
+│ │        ],\n        "v'+2095549505                                        │ │
+│ │ self = <json.decoder.JSONDecoder object at 0x149bf8f5f2f0>               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────────────────────╯
+JSONDecodeError: Expecting ',' delimiter: line 133786392 column 17 (char 
+2095549585)
