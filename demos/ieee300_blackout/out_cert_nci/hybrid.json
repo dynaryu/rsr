@@ -1,0 +1,20 @@
+{
+    "p_fail": 0.000104,
+    "ci95": [
+        9.78687522247292e-05,
+        0.00011051531361351833
+    ],
+    "n_sample": 10000000,
+    "n_fail": 1040,
+    "n_fail_certified": 0,
+    "n_fail_sfun": 1040,
+    "n_upper_certified": 515998,
+    "n_sfun": 9484002,
+    "free_frac": 0.05159979999999997,
+    "n_refs_upper": 87347,
+    "n_refs_lower": 8,
+    "n_cuts": 17,
+    "seed": 42,
+    "elapsed_sec": 10102.633,
+    "t_sfun_sec": 8981.008
+}
