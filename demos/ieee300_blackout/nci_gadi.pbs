@@ -51,14 +51,14 @@ echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=
 #    &> "$PBS_JOBID.log"
 #
 python3 -u run_demo.py \
-    --cert --sus-cuts 1000 --sus-runs 3 \
-    --hybrid 10_000_000 --hybrid-seed 42 \
-    --runs 1 \
+#    --cert --sus-cuts 1000 --sus-runs 3 \
+    --hybrid 10_000_000 --hybrid-only --hybrid-seed 42 \
+#    --runs 1 \
     --devices auto \
     --n-workers 48 \
-    --max-refs 100_000 \
-    --unk-opt abs --unk-thres 1.0e-5 \
-    --n-sample 10000000 --batch 100000 \
+#    --max-refs 100_000 \
+#    --unk-opt abs --unk-thres 1.0e-5 \
+#    --n-sample 10000000 --batch 100000 \
     --out "$RSR_ROOT/demos/ieee300_blackout/out_cert_nci" \
     &> "$PBS_JOBID.log"
 

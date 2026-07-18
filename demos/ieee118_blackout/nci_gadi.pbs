@@ -40,12 +40,23 @@ echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=
 # 304 components make this the hardest IEEE case; on a GPU node a tight absolute
 # gap is reachable, but it may take many rounds. Loosen --unk-thres (or use
 # --unk-opt rel) if you want a quicker bracketed estimate.
-python3 -u run_demo.py \
-    --runs 5 \
-    --devices auto \
-    --n-workers 48 \
-    --max-refs 100_000 \
-    --unk-opt abs --unk-thres 1.0e-5 \
-    --n-sample 10000000 --batch 100000 \
-    --out "$RSR_ROOT/demos/ieee118_blackout/out_nci2" \
-    &> "$PBS_JOBID.log"
+
+COMMON="--runs 1 --devices auto --n-workers 96 --max-refs 10000 \
+        --batch 100000 --unk-opt abs --unk-thres 1e-6 \
+        --coverage-aware --ca-n-orders 4 --ca-n-seeds 48 --ca-max-add 48"
+
+python run_demo.py $COMMON --ca-failure-beta 0 --out cov_fw/beta0 &> "$PBS_JOBID.beta0.log"
+#python run_demo.py $COMMON --ca-failure-beta 2 --out cov_fw/beta2 &> "$PBS_JOBID.beta2.log"
+#python run_demo.py $COMMON --ca-failure-beta 4 --out cov_fw/beta4 &> "$PBS_JOBID.beta4.log"
+
+
+
+#python3 -u run_demo.py \
+#    --runs 5 \
+#    --devices auto \
+#    --n-workers 48 \
+#    --max-refs 100_000 \
+#    --unk-opt abs --unk-thres 1.0e-5 \
+#    --n-sample 10000000 --batch 100000 \
+#    --out "$RSR_ROOT/demos/ieee118_blackout/out_nci2" \
+#    &> "$PBS_JOBID.log"

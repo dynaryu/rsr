@@ -17,7 +17,7 @@
 #PBS -m ae
 #PBS -P n74
 #PBS -q gpuvolta
-#PBS -l walltime=10:00:00
+#PBS -l walltime=24:00:00
 #PBS -l ngpus=2
 #PBS -l ncpus=24
 #PBS -l mem=191GB
@@ -42,6 +42,7 @@ COMMON="--runs 1 --devices auto --n-workers 48 --max-refs 100_000 \
         --batch 100000 --n-sample 10000000 --unk-opt abs --unk-thres 1.0e-6"
 
 python3 -u run_demo.py $COMMON --coverage-aware \
+    --resume \
     --ca-n-orders 4 --ca-n-seeds 96 --ca-max-add 48 \
     --out "$OUT" &> "$PBS_JOBID.cov_100k.log"
 
