@@ -50,15 +50,26 @@ echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=
 #    --out "$RSR_ROOT/demos/ieee300_blackout/out_nci" \
 #    &> "$PBS_JOBID.log"
 #
-python3 -u run_demo.py \
+# NOTE: never interleave '#' comment lines inside a backslash-continued
+# command — bash treats the rest of the joined line (including the trailing
+# backslash) as comment, silently truncating the command. Job 174101104 ran
+# `python3 -u run_demo.py` with NO arguments because of exactly that.
+#
+# Fresh cert extraction + SuS + hybrid (self-contained, ~1.5 h):
+#python3 -u run_demo.py \
 #    --cert --sus-cuts 1000 --sus-runs 3 \
+#    --max-refs 10000 \
+#    --hybrid 10_000_000 --hybrid-seed 42 \
+#    --devices auto \
+#    --n-workers 48 \
+#    --out "$RSR_ROOT/demos/ieee300_blackout/out_cert_nci" \
+#    &> "$PBS_JOBID.log"
+
+# Hybrid only, on the existing out_cert_nci checkpoint (~1 h):
+python3 -u run_demo.py \
     --hybrid 10_000_000 --hybrid-only --hybrid-seed 42 \
-#    --runs 1 \
     --devices auto \
     --n-workers 48 \
-#    --max-refs 100_000 \
-#    --unk-opt abs --unk-thres 1.0e-5 \
-#    --n-sample 10000000 --batch 100000 \
     --out "$RSR_ROOT/demos/ieee300_blackout/out_cert_nci" \
     &> "$PBS_JOBID.log"
 

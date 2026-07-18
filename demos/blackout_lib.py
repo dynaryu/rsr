@@ -136,7 +136,14 @@ def load_checkpoint(out: Path, device, row_names=None):
         if not pt_path.exists():
             return [], None
         mat = torch.load(pt_path, weights_only=True).to(device)
-        dicts = _load_dicts(json_path) if json_path.exists() else []
+        dicts = []
+        if json_path.exists():
+            try:
+                dicts = _load_dicts(json_path)
+            except (json.JSONDecodeError, ValueError) as e:
+                # e.g. truncated mid-write by a walltime-killed run
+                print(f"  checkpoint {json_path.name}: unreadable "
+                      f"({type(e).__name__}); treating as stale")
         if len(dicts) != len(mat):
             if row_names is None:
                 raise ValueError(

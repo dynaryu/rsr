@@ -1506,3 +1506,22 @@ def test_checkpoint_reconstruction_matches_final_json(tmp_path):
                           for d in _json.load(f)]
         mat = torch.load(res[pt_key], weights_only=True)
         assert rsr.refs_dicts_from_mat(mat, row_names, op, sys_st) == dicts_json
+
+
+def test_load_checkpoint_survives_corrupt_json(tmp_path):
+    # A walltime-killed run can leave a truncated JSON next to a valid .pt
+    # (NCI job 174108901 regression): load_checkpoint must fall back to
+    # rebuilding the dicts from the tensor instead of crashing.
+    import sys as _sys
+    _sys.path.insert(0, str(HOME.parent / "demos"))
+    import blackout_lib
+    row_names = ['x1', 'x2', 'x3', 'x4']
+    ups = [{'x1': ('>=', 1), 'sys': ('>=', 1)},
+           {'x2': ('>=', 1), 'x3': ('>=', 1), 'sys': ('>=', 1)}]
+    mat = torch.stack([rsr.from_ref_dict_to_mat(d, row_names, 2, device='cpu')
+                       for d in ups])
+    torch.save(mat, tmp_path / "refs_up_1.pt")
+    (tmp_path / "refs_up_1.json").write_text('[\n  {"x1": [">=", 1')  # truncated
+    ck = blackout_lib.load_checkpoint(tmp_path, 'cpu', row_names)
+    assert ck["refs_upper"] == ups
+    assert len(ck["refs_mat_upper"]) == 2
