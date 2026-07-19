@@ -1,0 +1,58 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job 2 of 2: SHARDED hybrid P(blackout) estimate (array job).
+# Each array task estimates the hybrid on an independent seed against the
+# shared checkpoint from nci_build_checkpoint.pbs, on its own node. Pooling
+# the shards (combine_hybrid.py) gives the same estimate as one huge job but
+# scales past the single-node worker limit (rsr's fork Pool is shared-memory,
+# so one process cannot use more than one node's cores).
+#
+# Submit AFTER the checkpoint job finishes:  qsub nci_hybrid_array.pbs
+# Then pool:  python combine_hybrid.py --base out_cert_nci
+#
+# 20 tasks x 500k samples = 1e7 total -> ~1000 failures at p_f ~ 1e-4 ->
+# ~+-6% CI. Scale the array size / SHARD_N for a tighter or looser interval.
+# normalsl = Sapphire Rapids ~104 cores/512GB (verify; fallback -q normal,
+# ncpus=48/mem=190GB, and set SHARD workers to 48).
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m ae
+#PBS -P n74
+#PBS -q normalsl
+#PBS -l walltime=05:00:00
+#PBS -l ncpus=104
+#PBS -l mem=490GB
+#PBS -l jobfs=24GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -N activ2000_hyb
+#PBS -J 0-19
+
+module load python3/3.12.1
+source /g/data/n74/hxr547/tsum/.venv/bin/activate
+
+RSR_ROOT=/scratch/n74/hxr547/rsr
+cd "$RSR_ROOT/demos/activsg2000_blackout"
+
+CKPT="$RSR_ROOT/demos/activsg2000_blackout/out_cert_nci"
+SHARD_N=500000
+SEED=$((100 + PBS_ARRAY_INDEX))
+TASK_OUT="$CKPT/hybrid_shards/task_${PBS_ARRAY_INDEX}"
+mkdir -p "$TASK_OUT"
+
+# --hybrid-only reads the checkpoint from --out, so give each task its own
+# copy of the (small, ~45 MB) checkpoint and let it write its own hybrid.json
+# there. Reads of the source checkpoint would otherwise race with each task's
+# own hybrid.json write.
+cp "$CKPT"/refs_up_1.pt "$CKPT"/refs_low_0.pt "$CKPT"/failure_cuts_0.pkl "$TASK_OUT"/ 2>/dev/null
+cp "$CKPT"/refs_up_1.json "$CKPT"/refs_low_0.json "$TASK_OUT"/ 2>/dev/null
+
+echo "Task $PBS_ARRAY_INDEX on $(hostname): seed=$SEED N=$SHARD_N -> $TASK_OUT"
+
+python3 -u run_demo.py \
+    --hybrid-only --hybrid "$SHARD_N" --hybrid-seed "$SEED" \
+    --batch 20000 \
+    --device cpu \
+    --n-workers 104 \
+    --out "$TASK_OUT" \
+    &> "$TASK_OUT/run.log"

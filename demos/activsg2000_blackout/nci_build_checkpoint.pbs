@@ -1,0 +1,53 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job 1 of 2: build the ACTIVSg2000 rule/cut CHECKPOINT.
+# Runs SuS -> failure cuts + a short survival extraction ONCE; the hybrid
+# array job (nci_hybrid_array.pbs) then estimates P(blackout) against this
+# checkpoint on many nodes. Submit with:  qsub nci_build_checkpoint.pbs
+#
+# CPU-only: every step here is DC-OPF solves (~0.9 s each), no GPU needed.
+# normalsl = Sapphire Rapids, ~104 cores / 512 GB per node (verify current
+# specs). If you only have `normal`, set -q normal / ncpus=48 / mem=190GB.
+#
+# PREREQUISITE: the generated dataset must be on Gadi at
+#   $RSR_ROOT/../network-datasets/datasets/ACTIVSg2000/v1
+# (build_dataset.py needs the MATPOWER source, which is not on Gadi — commit
+# the built v1/ dir to network-datasets and pull it, or scp it).
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m e
+#PBS -P n74
+#PBS -q normalsl
+#PBS -l walltime=01:30:00
+#PBS -l ncpus=104
+#PBS -l mem=490GB
+#PBS -l jobfs=24GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -N activ2000_ckpt
+
+module load python3/3.12.1
+source /g/data/n74/hxr547/tsum/.venv/bin/activate     # torch + scipy + typer
+
+RSR_ROOT=/scratch/n74/hxr547/rsr
+cd "$RSR_ROOT/demos/activsg2000_blackout"
+echo "Job $PBS_JOBID on $(hostname): NCPUS=${PBS_NCPUS:-?}"
+
+# --cert --sus-cuts : SuS -> dual failure cuts (p_lower).
+# --max-refs 500    : survival boxes barely cover this grid, so keep it short;
+#                     the checkpoint's value is the cuts + a small ref set for
+#                     the hybrid's free classification.
+# --device cpu      : no GPU on this queue; sampling/classification on CPU is
+#                     cheap next to the 0.9 s solves.
+python3 -u run_demo.py \
+    --cert \
+    --sus-cuts 800 --sus-runs 2 \
+    --max-refs 500 \
+    --n-sample 1_000_000 --batch 20000 \
+    --device cpu \
+    --n-workers 104 \
+    --out "$RSR_ROOT/demos/activsg2000_blackout/out_cert_nci" \
+    &> "$PBS_JOBID.log"
+
+echo "checkpoint written to out_cert_nci/ (refs_up_1.*, refs_low_0.*, failure_cuts_0.pkl)"
+echo "next: qsub nci_hybrid_array.pbs"
