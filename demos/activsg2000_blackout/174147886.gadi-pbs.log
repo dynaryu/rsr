@@ -1,0 +1,49 @@
+================================================================
+RSR demo — ACTIVSg2000 DC-OPF blackout reliability
+================================================================
+  Resources:   GPUs=cpu  CPU workers=128  (visible: 0 GPU, 128 CPU)
+  Dataset:     /scratch/n74/hxr547/rsr/demos/activsg2000_blackout/../../../network-datasets/datasets/ACTIVSg2000/v1
+  Components:  5206 (485 generator buses, 1515 ordinary buses, 3206 branches)
+  Max states:  4   Device: cpu
+  Threshold:   4.7% blackout → system failure
+DC-OPF sfun ready: 2000 buses, 485 generators, 3206 branches
+  All operational: blackout=  0.00%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+  Certificates: LP survival boxes + dual failure cuts (cert_lib)
+
+SuS -> cut pipeline: 2 run(s), 800 samples/level, p0=0.1 ...
+[SuS] Level 0 (prior MC): N=800, fail_samples=0, fval range=[0.1351, 4.293]
+[SuS] Level 1: threshold fval=2.037, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 2: threshold fval=3.179, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 3: threshold fval=4.289, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 4: threshold fval=4.437, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 5: threshold fval=4.647, n_seeds=80, failures_in_seeds=12/80
+[SuS] Level 6: threshold fval=4.809, n_seeds=80, failures_in_seeds=80/80
+[SuS] Done: levels=6, terminated_by=failure_boundary, failed_samples=164, sfun_calls=4400
+[SuS] Level 0 (prior MC): N=800, fail_samples=0, fval range=[0.07497, 3.275]
+[SuS] Level 1: threshold fval=1.952, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 2: threshold fval=2.959, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 3: threshold fval=3.275, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 4: threshold fval=3.415, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 5: threshold fval=3.529, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 6: threshold fval=3.642, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 7: threshold fval=3.808, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 8: threshold fval=4.021, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 9: threshold fval=4.183, n_seeds=80, failures_in_seeds=0/80
+[SuS] Level 10: threshold fval=4.412, n_seeds=80, failures_in_seeds=11/80
+[SuS] Done: levels=10, terminated_by=max_levels, failed_samples=110, sfun_calls=8000
+[SuS->cuts] 2 run(s), levels=[6, 10], 12400 sfun calls; 274 failed states (80 unique, 0 already certified) -> 0 cuts (0 refined), 80 relaxation gaps, 80 LP solves
+
+Extracting survival / failure rules (unknown gap < 1e-06 [abs])...
+
+Parallel mode: 128 CPU workers for sfun + minimization
+---
+Round: 1, Unk. prob.: 1.000e+00
+Upper probs: 0.000e+00, Lower probs: 0.000e+00
+No. of non-dominant refs: 0, Survival refs: 0, Failure refs: 0
+Batch update: 128 refs added, 0 existing refs removed (0 new refs dominated)
+Survival: 128 refs added, 0 removed (from 128 certificates)
+---
+Round: 2, Unk. prob.: 1.000e+00
+Upper probs: 0.000e+00, Lower probs: 0.000e+00
+No. of non-dominant refs: 128, Survival refs: 128, Failure refs: 0

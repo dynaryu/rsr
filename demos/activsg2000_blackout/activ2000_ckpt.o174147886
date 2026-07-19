@@ -1,0 +1,13 @@
+Job 174147886.gadi-pbs on gadi-cpu-skl-0001.gadi.nci.org.au: NCPUS=128
+
+======================================================================================
+                  Resource Usage on 2026-07-19 23:17:41:
+   Job Id:             174147886.gadi-pbs
+   Project:            n74
+   Exit Status:        -29 (Job failed due to exceeding walltime)
+   Service Units:      291.15
+   NCPUs Requested:    128                 CPU Time Used: 05:11:49        
+   Memory Requested:   768.0GB               Memory Used: 152.28GB        
+   Walltime Requested: 01:30:00            Walltime Used: 01:30:59        
+   JobFS Requested:    24.0GB                 JobFS Used: 0B              
+======================================================================================
