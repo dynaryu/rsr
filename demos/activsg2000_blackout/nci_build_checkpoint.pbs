@@ -48,6 +48,12 @@ python3 -u run_demo.py \
     --n-workers 128 \
     --out "$RSR_ROOT/demos/activsg2000_blackout/out_cert_nci" \
     &> "$PBS_JOBID.log"
-
+RC=$?
+# without this, a Killed/OOM python (nonzero) is masked by the trailing echo
+# and PBS reports Exit Status 0 — as happened on job 174145481.
+if [ $RC -ne 0 ]; then
+    echo "run_demo FAILED (exit $RC) — see $PBS_JOBID.log and the .e file"
+    exit $RC
+fi
 echo "checkpoint written to out_cert_nci/ (refs_up_1.*, refs_low_0.*, failure_cuts_0.pkl)"
 echo "next: qsub nci_hybrid_array.pbs"

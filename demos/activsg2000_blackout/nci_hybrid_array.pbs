@@ -12,16 +12,16 @@
 #
 # 20 tasks x 500k samples = 1e7 total -> ~1000 failures at p_f ~ 1e-4 ->
 # ~+-6% CI. Scale the array size / SHARD_N for a tighter or looser interval.
-# normalsl = Sapphire Rapids ~104 cores/512GB (verify; fallback -q normal,
-# ncpus=48/mem=190GB, and set SHARD workers to 48).
+# normalsl = Sapphire Rapids 128 cores/768GB per node (fallback -q normal,
+# ncpus=48/mem=190GB, and set --n-workers to 48).
 # ============================================================================
 #PBS -M hyeuk.ryu@ga.gov.au
 #PBS -m ae
 #PBS -P n74
 #PBS -q normalsl
 #PBS -l walltime=05:00:00
-#PBS -l ncpus=104
-#PBS -l mem=490GB
+#PBS -l ncpus=128
+#PBS -l mem=768GB
 #PBS -l jobfs=24GB
 #PBS -l wd
 #PBS -l storage=scratch/y57+scratch/n74+gdata/n74
@@ -53,6 +53,9 @@ python3 -u run_demo.py \
     --hybrid-only --hybrid "$SHARD_N" --hybrid-seed "$SEED" \
     --batch 20000 \
     --device cpu \
-    --n-workers 104 \
+    --n-workers 128 \
     --out "$TASK_OUT" \
     &> "$TASK_OUT/run.log"
+RC=$?
+if [ $RC -ne 0 ]; then echo "task $PBS_ARRAY_INDEX FAILED (exit $RC) — see $TASK_OUT/run.log"; fi
+exit $RC
