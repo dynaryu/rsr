@@ -19,8 +19,8 @@
 #PBS -P n74
 #PBS -q normalsl
 #PBS -l walltime=01:30:00
-#PBS -l ncpus=104
-#PBS -l mem=490GB
+#PBS -l ncpus=128
+#PBS -l mem=768GB
 #PBS -l jobfs=24GB
 #PBS -l wd
 #PBS -l storage=scratch/y57+scratch/n74+gdata/n74
@@ -45,7 +45,7 @@ python3 -u run_demo.py \
     --max-refs 500 \
     --n-sample 1_000_000 --batch 20000 \
     --device cpu \
-    --n-workers 104 \
+    --n-workers 128 \
     --out "$RSR_ROOT/demos/activsg2000_blackout/out_cert_nci" \
     &> "$PBS_JOBID.log"
 

@@ -1,0 +1,15 @@
+Job 174145481.gadi-pbs on gadi-cpu-skl-0001.gadi.nci.org.au: NCPUS=128
+checkpoint written to out_cert_nci/ (refs_up_1.*, refs_low_0.*, failure_cuts_0.pkl)
+next: qsub nci_hybrid_array.pbs
+
+======================================================================================
+                  Resource Usage on 2026-07-19 20:26:05:
+   Job Id:             174145481.gadi-pbs
+   Project:            n74
+   Exit Status:        0
+   Service Units:      34.45
+   NCPUs Requested:    128                 CPU Time Used: 04:10:25        
+   Memory Requested:   490.0GB               Memory Used: 122.49GB        
+   Walltime Requested: 01:30:00            Walltime Used: 00:10:46        
+   JobFS Requested:    24.0GB                 JobFS Used: 0B              
+======================================================================================
