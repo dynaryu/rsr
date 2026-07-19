@@ -1,0 +1,71 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job: RSR ACTIVSg2000 blackout demo (gpuvolta, full node).
+# Submit with:  qsub nci_gadi.pbs
+#
+# gpuvolta allocates 12 CPUs + ~95.5 GB per GPU; a FULL node is
+# ngpus=4 / ncpus=48 / mem=382GB. This case is CPU-bound (each 2000-bus
+# DC-OPF solve is ~0.9 s on a laptop, and ~0% of samples are rule-classified
+# so nearly every hybrid sample needs a solve) — the GPUs only do the cheap
+# sampling/classification. We take the full node for its 48 cores (96 logical
+# with hyperthread); the 4 GPUs come bundled with the CPUs on this queue.
+#
+# PREREQUISITE — the dataset is a GENERATED artifact and must already be on
+# Gadi at  $RSR_ROOT/../network-datasets/datasets/ACTIVSg2000/v1  (aggregated
+# case_ACTIVSg2000.m + probs.json + scripts). build_dataset.py needs the
+# MATPOWER source, which is NOT on Gadi, so commit the built dataset to
+# network-datasets and pull it (or scp the v1/ dir) before submitting.
+#
+# Check the venv path / project / storage mounts below before submitting.
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m e
+#PBS -P n74
+#PBS -q gpuvolta
+#PBS -l walltime=10:00:00
+#PBS -l ngpus=4
+#PBS -l ncpus=48
+#PBS -l mem=382GB
+#PBS -l jobfs=24GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -l other=hyperthread
+#PBS -N rsr_activ2000
+
+module load python3/3.12.1
+module load cuda
+source /g/data/n74/hxr547/tsum/.venv/bin/activate     # torch + scipy + typer
+
+RSR_ROOT=/scratch/n74/hxr547/rsr                       # rsr checkout on Gadi
+cd "$RSR_ROOT/demos/activsg2000_blackout"
+
+echo "Job $PBS_JOBID on $(hostname): GPUs=[${CUDA_VISIBLE_DEVICES:-none}] NCPUS=${PBS_NCPUS:-?}"
+
+# 5206 components (485 gen buses + 1515 buses + 3206 branches), threshold 6%
+# blackout (Chan et al. 2024: the p_f ~ 1e-4 level for this grid).
+#
+# --sus-cuts / --sus-runs : Subset-Simulation -> dual failure cuts (p_lower).
+# --max-refs 500          : survival boxes barely cover this grid (each box
+#                           conditions ~90% of components), so keep the
+#                           extraction short — the deliverable is the SuS cuts
+#                           and the hybrid estimate, not survival coverage.
+# --hybrid 1_000_000      : unbiased P(blackout) + 95% CI. At p_f ~ 1e-4 this
+#                           collects ~100 failures -> +-10% CI. Raise to 1e7
+#                           for +-3% (but that is ~10x the walltime here).
+# --batch 20000           : one-hot sample tensor is ~7x IEEE-300's; 20000 x
+#                           5206 x 4 states fits a V100. --devices auto splits
+#                           it across the 4 GPUs.
+# --n-workers 96          : one worker per logical thread (48 cores x HT). The
+#                           DC-OPF solves dominate, so this is the throughput
+#                           knob. --n-sample keeps the periodic full estimate
+#                           cheap (it is GPU-only classification).
+python3 -u run_demo.py \
+    --cert \
+    --sus-cuts 800 --sus-runs 2 \
+    --max-refs 500 \
+    --hybrid 1_000_000 --hybrid-seed 42 \
+    --n-sample 1_000_000 --batch 20000 \
+    --devices auto \
+    --n-workers 96 \
+    --out "$RSR_ROOT/demos/activsg2000_blackout/out_cert_nci" \
+    &> "$PBS_JOBID.log"

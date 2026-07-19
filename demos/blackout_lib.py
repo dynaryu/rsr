@@ -318,7 +318,8 @@ def print_report(res, reliability, crit, cutsets, out: Path, ref_pf):
     print(f"  P(blackout):        {p_fail:.3e}   "
           f"(bounds: [{p_fail:.3e}, {p_fail + p_unk:.3e}], gap {p_unk:.1e})")
     print(f"  P(survival):        {r['p_survival']:.4f}")
-    print(f"  Reference (paper):  p_f ~ {ref_pf:.1e}")
+    print(f"  Reference (paper):  p_f ~ {ref_pf:.1e}" if ref_pf is not None
+          else "  Reference (paper):  n/a (no published p_f for this case)")
     print(f"\n  {r['n_cutsets']} minimal cut-sets (failure modes).")
     print(f"  Single points of failure: {r['single_points_of_failure'] or 'none'}")
     print("  Smallest failure modes:")
@@ -365,7 +366,8 @@ def hybrid_estimate(sfun, probs, row_names, n_state, out: Path, *,
     print("=" * 64)
     print(f"  P(blackout):        {res['p_fail']:.3e}   "
           f"(95% CI [{lo:.3e}, {hi:.3e}], {res['n_fail']:,} failures)")
-    print(f"  Reference (paper):  p_f ~ {ref_pf:.1e}")
+    if ref_pf is not None:
+        print(f"  Reference (paper):  p_f ~ {ref_pf:.1e}")
     print(f"  Free classification: {res['free_frac'] * 100:.1f}% of samples "
           f"({res['n_sfun']:,} sfun calls for the rest)")
     print(f"  Failures:           {res['n_fail_certified']:,} rule-certified "

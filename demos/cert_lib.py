@@ -462,6 +462,157 @@ class CertModel:
         cut = FailureCut(bus_terms, gen_terms, line_terms, self.req0)
         return cut, {"n_lp": 1, "served_pu": served}
 
+    # -- Kirchhoff-aware failure cut ---------------------------------------
+    def extract_kvl_failure_cut(self, comps_st):
+        """One full DC-OPF solve (WITH Kirchhoff) at a failed state -> cut.
+
+        Closes the transportation-relaxation gap: the seed's own DC LP *is*
+        the system function, so a failed seed always yields served < req —
+        including the congestion-driven failures the transportation dual
+        cannot see. The price is validity scope. The DC-OPF optimal served
+        load is concave in the generator/line *capacities* only at a **fixed
+        network topology**: a line or bus outage changes the susceptance
+        matrix (not just an RHS bound) and DC power flow is not monotone in
+        topology (Braess), so the dual supergradient bound is valid only on
+        the seed's exact topology. The certificate is therefore a *topology
+        box x generator half-space* hybrid, and the box must pin the **whole**
+        topology, not just the failed part:
+
+          - every bus and branch is pinned to its seed alive/dead status
+            (seed-alive -> state >= 1, seed-dead -> state 0), via big-M
+            per-state table entries in rsr's vectorised evaluator. Pinning
+            only the failed components is UNSOUND — when a seed-alive line
+            fails, the network re-routes and served load can exceed the
+            affine bound (empirically ~0.6% of certified states then
+            survive);
+          - within that topology the surviving generators get an affine
+            half-space from the DC dual's capacity supergradient:
+            served(caps') <= served(seed) + sum lam_g (cap'_g - cap_g(seed)).
+            A generator dropping to state 0 removes its bus (a topology
+            change), which the alive-pin already forbids, so its half-space
+            table entry needs no special casing.
+
+        Returns (cut, info); one linprog solve. The pinned topology makes
+        each cut a thin slab of ~1e-11 prior mass — see proto_kcut.py.
+        """
+        from func_dcopt_py import _find_ref_buses
+        from pypower.idx_bus import BUS_I
+        from pypower.idx_gen import GEN_BUS, PMAX, PMIN
+        from pypower.idx_brch import F_BUS, T_BUS, BR_X, TAP, RATE_A
+
+        ss = self._system_state(comps_st)
+        # full-topology pins: seed-alive (ss != 1) must stay alive (>=1),
+        # seed-dead (ss == 1) must stay dead (state 0). Length-2 fracs pad by
+        # repetition, so [1,0] penalises state 0 for both 2- and 4-state
+        # comps, and [0,1] penalises every state >= 1.
+        alive_pin, dead_pin = [], []
+        for i, bus_id in enumerate(self.bus_dic):
+            (dead_pin if ss[i] == 1.0 else alive_pin).append(f"vbus{bus_id}")
+        for j in range(self.nl):
+            (dead_pin if ss[self.nb + j] == 1.0 else alive_pin).append(f"br{j + 1}")
+        req = (1.0 - self.threshold / 100.0) * self.totpf / self.baseMVA \
+            * (1 + 1e-6)
+
+        mpc, kept_gen, kept_br = self._reduce(comps_st)
+        bus, gen, branch = mpc['bus'], mpc['gen'], mpc['branch']
+        nb_r, nl_r = bus.shape[0], branch.shape[0]
+        is_orig = kept_gen < self.ng
+        orig_rows = np.where(is_orig)[0]
+        load_rows = np.where(~is_orig)[0]
+        G, L = len(orig_rows), len(load_rows)
+
+        if nb_r == 0 or nl_r == 0 or G == 0 or L == 0:
+            # nothing can be served at this topology: purely topological cut
+            served, lam = 0.0, np.zeros(0)
+            gen_terms, k_const = [], 0.0
+        else:
+            base = self.baseMVA
+            bus_map = {int(b): i for i, b in enumerate(bus[:, BUS_I].astype(int))}
+            x_br = branch[:, BR_X].copy(); x_br[x_br == 0] = 1e-6
+            tap = branch[:, TAP].copy(); tap[tap == 0] = 1.0
+            b_br = 1.0 / (x_br * tap)
+            f_bus = np.array([bus_map[int(b)] for b in branch[:, F_BUS]])
+            t_bus = np.array([bus_map[int(b)] for b in branch[:, T_BUS]])
+            Bf = np.zeros((nl_r, nb_r)); Bbus = np.zeros((nb_r, nb_r))
+            for l in range(nl_r):
+                f, t, b = f_bus[l], t_bus[l], b_br[l]
+                Bf[l, f] += b; Bf[l, t] -= b
+                Bbus[f, f] += b; Bbus[f, t] -= b
+                Bbus[t, f] -= b; Bbus[t, t] += b
+            rate = branch[:, RATE_A] / base
+            rate[rate == 0] = 1e10
+            ref_buses = _find_ref_buses(bus, branch, bus_map)
+            pmax_r = gen[:, PMAX] / base
+            pmin_r = gen[:, PMIN] / base
+
+            nv = G + L + nb_r
+            c = np.zeros(nv); c[G:G + L] = 1.0           # min sum(Pl) = max served
+            lo = np.full(nv, 0.0); hi = np.full(nv, 0.0)
+            for gi, row in enumerate(orig_rows):
+                hi[gi] = pmax_r[row]
+            for li, row in enumerate(load_rows):
+                lo[G + li], hi[G + li] = pmin_r[row], 0.0
+            va0 = G + L
+            for i in range(nb_r):
+                lo[va0 + i], hi[va0 + i] = (0.0, 0.0) if i in ref_buses \
+                    else (-np.inf, np.inf)
+            A_eq = np.zeros((nb_r, nv)); b_eq = np.zeros(nb_r)
+            for gi, row in enumerate(orig_rows):
+                A_eq[bus_map[int(gen[row, GEN_BUS])], gi] = 1.0
+            for li, row in enumerate(load_rows):
+                A_eq[bus_map[int(gen[row, GEN_BUS])], G + li] = 1.0
+            A_eq[:, va0:] = -Bbus
+            A_ub = np.zeros((2 * nl_r, nv))
+            b_ub = np.concatenate([rate, rate])
+            A_ub[:nl_r, va0:] = Bf
+            A_ub[nl_r:, va0:] = -Bf
+
+            res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq,
+                          bounds=list(zip(lo, hi)), method='highs',
+                          options={'presolve': True})
+            self.n_solves += 1
+            if not res.success:
+                return None, {"fail": f"linprog: {res.message}", "n_lp": 1}
+            served = -res.fun
+            if served > req - 1e-9:
+                return None, {"fail": "seed survives the DC solve",
+                              "served_pu": served, "n_lp": 1}
+
+            lam = np.maximum(-res.upper.marginals[:G], 0.0)   # supergradient
+            lam[lam < 1e-12] = 0.0
+            cap_seed = pmax_r[orig_rows]
+            k_const = served - float(lam @ cap_seed)
+
+            gen_frac = [float(GEN_FRAC[s]) for s in sorted(GEN_FRAC)]
+            half_terms = []
+            for gi, row in enumerate(orig_rows):
+                if lam[gi] <= 0.0:
+                    continue
+                g_orig = kept_gen[row]
+                half_terms.append((f"vbus{self.gen_dic[g_orig]}",
+                                   float(lam[gi] * self.pm_orig_pu[g_orig]),
+                                   gen_frac))
+
+        thr = req - k_const
+        half_sum = sum(w for _n, w, _f in half_terms)
+        big_m = 10.0 * (abs(thr) + half_sum + 1.0)
+        # topology pins (big-M) + the generator half-space, all as gen_terms
+        gen_terms = ([(n, big_m, [1.0, 0.0]) for n in alive_pin]   # dead -> +M
+                     + [(n, big_m, [0.0, 1.0]) for n in dead_pin]  # alive -> +M
+                     + half_terms)
+        cut = FailureCut([], gen_terms, [], thr)
+
+        # self-check (weak duality at the seed): the seed itself certifies.
+        # At the seed all pins are satisfied (contribute 0), so W = W_half.
+        w_seed = float(sum(w * f[min(comps_st.get(n, len(f) - 1), len(f) - 1)]
+                           for n, w, f in half_terms))
+        if w_seed > thr - 1e-7:
+            return None, {"fail": f"seed not self-certified: W={w_seed} "
+                          f"vs thr={thr}", "n_lp": 1}
+        return cut, {"n_lp": 1, "served_pu": served,
+                     "n_conditioned": len(alive_pin) + len(dead_pin),
+                     "n_gen_terms": len(half_terms)}
+
 
 # ---------------------------------------------------------------------------
 # Dual-guided cut refinement
