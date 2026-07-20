@@ -1597,3 +1597,53 @@ def test_subset_sim_estimate_known_pf():
     for d in res["per_run"]:
         assert d["p_fail"] == pytest.approx(
             d["cum_prob"] * d["n_fail_final"] / d["n_final"], rel=1e-9)
+
+
+# ---------- aE-SuS-EC (adaptive latent-Gaussian Subset Simulation) ----------
+def test_aesus_continuous_exact():
+    # Linear limit state g(u) = beta - u_1 in 50 dims: p_f = Phi(-beta),
+    # exactly computable — validates the aCS sampler + level machinery.
+    from scipy.stats import norm as _norm
+    from rsr.aesus import _aesus_single_run
+    import numpy as _np
+    beta = 3.0
+    _np.random.seed(0); torch.manual_seed(0)
+    pfs = []
+    for _ in range(5):
+        res = _aesus_single_run(lambda u: (beta - u[:, 0]).numpy(), dim=50,
+                                n0=1000, p0=0.1, tol=0.8, max_levels=50,
+                                lambda0=0.6, scheme='adaptive')
+        assert res['reached']
+        pfs.append(res['p_fail'])
+    geo = float(_np.exp(_np.mean(_np.log(pfs))))
+    p_true = float(_norm.cdf(-beta))
+    assert 0.6 * p_true < geo < 1.6 * p_true
+
+
+def test_aesus_discrete_binomial_exact():
+    # The discrete-ties case that biases basic SuS: exact binomial p_f.
+    # aE-SuS's chain-extension + measured conditional fractions must land
+    # on it (validated interactively at ratio 1.00).
+    from math import comb
+    from rsr.aesus import aesus_estimate
+    N, q, K = 24, 0.25, 12
+    row_names = [f"c{i}" for i in range(N)]
+    probs = torch.tensor([[q, 1 - q]] * N, dtype=torch.float64)
+
+    def sfun(cst):
+        nf = sum(1 for k in row_names if cst[k] == 0)
+        return float(nf), (0 if nf >= K else 1), None
+
+    p_true = sum(comb(N, k) * q**k * (1 - q)**(N - k) for k in range(K, N + 1))
+    res = aesus_estimate(probs, sfun, row_names, 1, threshold_fval=K,
+                         n_runs=5, n0=1000, p0=0.1, tol=0.8,
+                         n_workers=1, seed=0, verbose=False)
+    assert res['n_runs_no_failure'] == 0
+    assert 0.6 * p_true < res['geom_mean'] < 1.6 * p_true
+    assert res['ci95'][0] <= p_true <= res['ci95'][1]
+    assert res['converged']
+    # per-run estimate is the product of measured conditional fractions
+    for d in res['per_run']:
+        import numpy as _np
+        assert d['p_fail'] == pytest.approx(float(_np.prod(d['cond_probs'])),
+                                            rel=1e-12)

@@ -15,9 +15,15 @@
 # One node suffices: a SuS run is ~9k solves but its chain steps evaluate
 # ~100 candidates in parallel, so a run is ~2-4 min wall on 128 cores;
 # 10 independent runs (the empirical-CI methodology) fit in well under an
-# hour. NOTE: ours is basic SuS (fixed p0, component-wise MH) — on IEEE-14 it
-# lands within ~1.5x of the reference, so read the result as
-# order-of-magnitude with an empirical CI, not a precision estimate.
+# hour.
+#
+# *** RESOLVED: sus_estimate.py now defaults to --engine aesus (the
+# aE-SuS-EC port, rsr/aesus.py), which converges where the basic sampler
+# spread 5-10 decades. Laptop validation (3 runs, 20 cores, 31 min):
+# p_f(4.7%) = 5.9e-4, 95% CI [5.1, 6.9]e-4, spread 0.1 decades, c.o.v.
+# 0.13, ~7.4k solves/run. This job re-runs that at 10 repetitions on a
+# full node (~10-15 min) for the final quotable number. The basic engine
+# remains available via --engine basic (order-of-magnitude only). ***
 #
 # Threshold 4.7% = the p_f ~ 1e-4 level in THIS model, calibrated by
 # calibrate_threshold.py (the CDF is steep there: 3% ~ 1e-2, 4.9% ~ 1e-5).
@@ -29,10 +35,10 @@
 #PBS -M hyeuk.ryu@ga.gov.au
 #PBS -m e
 #PBS -P n74
-#PBS -q normalsl
+#PBS -q normalsr
 #PBS -l walltime=02:00:00
-#PBS -l ncpus=128
-#PBS -l mem=256GB
+#PBS -l ncpus=104
+#PBS -l mem=512GB
 #PBS -l jobfs=24GB
 #PBS -l wd
 #PBS -l storage=scratch/y57+scratch/n74+gdata/n74
@@ -51,7 +57,7 @@ python3 -u sus_estimate.py \
     --n-runs 10 \
     --n-per-level 1000 \
     --max-levels 15 \
-    --n-workers 128 \
+    --n-workers 104 \
     --seed 7 \
     --json "$RSR_ROOT/demos/activsg2000_blackout/out_sus_nci/sus_estimate.json" \
     &> "$RSR_ROOT/demos/activsg2000_blackout/$PBS_JOBID.log"

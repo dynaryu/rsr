@@ -34,6 +34,10 @@ DEFAULT_THRESHOLD = {"ieee14": 54.8, "ieee118": 13.8, "ieee300": 26.1,
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dataset", default="ACTIVSg2000")
+    ap.add_argument("--engine", choices=["aesus", "basic"], default="aesus",
+                    help="aesus = adaptive latent-Gaussian aE-SuS-EC (Chan et "
+                         "al.), converges on large grids; basic = the simple "
+                         "component-wise-MH SuS (order-of-magnitude only)")
     ap.add_argument("--threshold", type=float, default=None,
                     help="blackout %% failure threshold (default: per-dataset)")
     ap.add_argument("--alpha", type=float, default=2.0)
@@ -41,6 +45,10 @@ def main():
     ap.add_argument("--n-per-level", type=int, default=1000)
     ap.add_argument("--p0", type=float, default=0.1)
     ap.add_argument("--max-levels", type=int, default=15)
+    ap.add_argument("--n-flip-mean", type=float, default=5.0,
+                    help="avg components perturbed per MCMC step; LOWER it "
+                         "(e.g. 1.5) on high-dimensional grids where chains "
+                         "stick and runs disagree by decades")
     ap.add_argument("--n-workers", type=int, default=-1)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--json", type=Path, default=None,
@@ -54,23 +62,42 @@ def main():
     ds = _ND / args.dataset / "v1"
 
     probs, row_names, n_state, sfun, mi = build_model(ds, "cpu", threshold, args.alpha)
-    print(f"\nSubset-Simulation estimate: {args.n_runs} runs x "
-          f"{args.n_per_level}/level, p0={args.p0}, threshold={threshold}%\n")
+    print(f"\nSubset-Simulation estimate [{args.engine}]: {args.n_runs} runs "
+          f"x {args.n_per_level}/level, p0={args.p0}, threshold={threshold}%\n")
     t0 = time.time()
-    res = subset_sim_estimate(
-        probs, mi["dcopt"], row_names, sys_surv_st=1,
-        n_runs=args.n_runs, n_per_level=args.n_per_level, p0=args.p0,
-        max_levels=args.max_levels, severity_sign=+1,
-        n_workers=n_workers, seed=args.seed, verbose=True)
+    if args.engine == "aesus":
+        from rsr.aesus import aesus_estimate
+        res = aesus_estimate(
+            probs, mi["dcopt"], row_names, 1,
+            threshold_fval=threshold, severity_sign=+1,
+            n_runs=args.n_runs, n0=args.n_per_level, p0=args.p0,
+            n_workers=n_workers, seed=args.seed, verbose=True)
+    else:
+        res = subset_sim_estimate(
+            probs, mi["dcopt"], row_names, sys_surv_st=1,
+            n_runs=args.n_runs, n_per_level=args.n_per_level, p0=args.p0,
+            max_levels=args.max_levels, severity_sign=+1,
+            n_flip_mean=args.n_flip_mean,
+            n_workers=n_workers, seed=args.seed, verbose=True)
 
     print("\n" + "=" * 60)
     if res["p_fail"] > 0:
         lo, hi = res["ci95"]
-        print(f"  P(blackout) = {res['p_fail']:.3e}   "
-              f"95% CI [{lo:.3e}, {hi:.3e}]")
+        print(f"  P(blackout) = {res['geom_mean']:.3e}   "
+              f"95% CI [{lo:.3e}, {hi:.3e}]   (geometric mean; "
+              f"arithmetic mean {res['p_fail']:.3e})")
         print(f"  single-run c.o.v. = {res['cov_single_run']:.2f}   "
+              f"per-run spread {res['log10_spread']:.1f} decades   "
               f"({res['n_sfun']:,} sfun over {args.n_runs} runs, "
               f"{time.time() - t0:.0f}s)")
+        if not res["converged"]:
+            if args.engine == "aesus":
+                print("  NOT CONVERGED — raise --n-per-level (N0) or "
+                      "--n-runs.")
+            else:
+                print("  NOT CONVERGED — treat as order-of-magnitude only. "
+                      "n_flip_mean tuning does not fix this (measured); use "
+                      "--engine aesus.")
     else:
         print("  No failures reached — raise --max-levels or --n-per-level.")
     if res["n_runs_no_failure"]:

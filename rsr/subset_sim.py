@@ -413,6 +413,51 @@ def _sus_run_pf(res: Dict[str, Any], p0: float, sys_surv_st: int) -> Dict[str, A
             "n_sfun": res["n_sfun_calls"], "reached": n_fail > 0}
 
 
+def pool_run_stats(per_run: List[Dict[str, Any]], n_runs: int,
+                   total_cost: int) -> Dict[str, Any]:
+    """Combine per-run p_f estimates from independent SuS-family runs.
+
+    Shared by :func:`subset_sim_estimate` (basic SuS) and
+    ``rsr.aesus.aesus_estimate``. Reports the arithmetic mean, the geometric
+    mean with a log-normal 95% CI (coherent with multiplicative estimators),
+    the single-run c.o.v., the per-run spread in decades, and a ``converged``
+    flag (runs agree within about a decade AND c.o.v. <= 1).
+    """
+    valid = [d["p_fail"] for d in per_run if d["reached"]]
+    n_zero = len(per_run) - len(valid)
+    out: Dict[str, Any] = {
+        "p_fail": float(np.mean(valid)) if valid else 0.0,   # arithmetic mean
+        "n_runs": n_runs,
+        "n_runs_no_failure": n_zero,
+        "n_sfun": total_cost,
+        "per_run": per_run,
+        "cov_single_run": None,
+        "cov": None,
+        "ci95": None,                # log-normal CI around the GEOMETRIC mean
+        "geom_mean": None,
+        "log10_spread": None,        # decades between best and worst run
+        "converged": None,
+    }
+    if len(valid) >= 2:
+        arr = np.asarray(valid)
+        cov1 = float(arr.std(ddof=1) / arr.mean())          # ~paper's c.o.v.
+        logs = np.log(arr)
+        lm, ls = float(logs.mean()), float(logs.std(ddof=1))
+        sem = ls / math.sqrt(len(arr))
+        spread = float(np.log10(arr.max() / arr.min()))
+        out.update({
+            "cov_single_run": cov1,
+            "cov": cov1 / math.sqrt(len(arr)),
+            "geom_mean": math.exp(lm),
+            "ci95": [math.exp(lm - 1.959964 * sem), math.exp(lm + 1.959964 * sem)],
+            "log10_spread": spread,
+            # per-run agreement within about one decade; beyond that the
+            # MCMC did not mix and no summary statistic is trustworthy
+            "converged": bool(spread <= 1.0 and cov1 <= 1.0),
+        })
+    return out
+
+
 def subset_sim_estimate(
     probs: torch.Tensor,
     sfun: Callable,
@@ -496,41 +541,27 @@ def subset_sim_estimate(
             pool.close()
             pool.join()
 
-    valid = [d["p_fail"] for d in per_run if d["reached"]]
-    n_zero = len(per_run) - len(valid)
-    out: Dict[str, Any] = {
-        "p_fail": float(np.mean(valid)) if valid else 0.0,
-        "n_runs": n_runs,
-        "n_runs_no_failure": n_zero,
-        "n_sfun": total_sfun,
-        "per_run": per_run,
-        "cov_single_run": None,
-        "cov": None,
-        "ci95": None,
-        "geom_mean": None,
-    }
-    if len(valid) >= 2:
-        arr = np.asarray(valid)
-        cov1 = float(arr.std(ddof=1) / arr.mean())          # ~paper's c.o.v.
-        logs = np.log(arr)
-        lm, ls = float(logs.mean()), float(logs.std(ddof=1))
-        sem = ls / math.sqrt(len(arr))
-        out.update({
-            "cov_single_run": cov1,
-            "cov": cov1 / math.sqrt(len(arr)),
-            "geom_mean": math.exp(lm),
-            "ci95": [math.exp(lm - 1.959964 * sem), math.exp(lm + 1.959964 * sem)],
-        })
+    out = pool_run_stats(per_run, n_runs, total_sfun)
 
     if verbose:
-        p = out["p_fail"]
         if valid:
             ci = out["ci95"]
-            print(f"[sus-est] p_fail = {p:.3e}"
-                  + (f"  95% CI [{ci[0]:.3e}, {ci[1]:.3e}]  "
-                     f"(c.o.v. single-run {out['cov_single_run']:.2f})"
-                     if ci else "  (need n_runs>=2 for a CI)")
+            print(f"[sus-est] geometric mean = "
+                  f"{out['geom_mean'] if out['geom_mean'] else out['p_fail']:.3e}"
+                  + (f"  95% CI [{ci[0]:.3e}, {ci[1]:.3e}]" if ci else "")
+                  + f"   arithmetic mean = {out['p_fail']:.3e}"
+                  + (f"   (c.o.v. single-run {out['cov_single_run']:.2f})"
+                     if out['cov_single_run'] is not None else "")
                   + f"   {total_sfun:,} sfun over {n_runs} runs")
+            if out["converged"] is False:
+                print(f"[sus-est] WARNING: NOT CONVERGED — per-run estimates "
+                      f"span {out['log10_spread']:.1f} decades "
+                      f"(c.o.v. {out['cov_single_run']:.2f}). The MCMC is not "
+                      "mixing at this dimension/rarity; treat the numbers as "
+                      "order-of-magnitude at best. Tuning n_flip_mean does "
+                      "not fix this (measured on ACTIVSg2000: smaller made "
+                      "it worse); the remedy is an adaptive sampler "
+                      "(aE-SuS-style adaptive conditional MCMC).")
         if n_zero:
             print(f"[sus-est] WARNING: {n_zero}/{n_runs} runs reached no "
                   "failures — raise --max-levels or --n-per-level.")
