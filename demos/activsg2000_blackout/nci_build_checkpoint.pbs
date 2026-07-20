@@ -1,5 +1,11 @@
 #!/bin/bash
 # ============================================================================
+# *** SUPERSEDED for ACTIVSg2000 — use nci_sus_estimate.pbs instead. ***
+# Measured (twice): 100% of this grid's failures are congestion-driven, so
+# the SuS->cut phase yields 0 cuts and the survival boxes cover ~0% — the
+# checkpoint this job builds is empty of value, and the hybrid array on top
+# of it degenerates to plain MC at ~0.9 s/solve. Kept for reference only.
+# ============================================================================
 # NCI Gadi PBS job 1 of 2: build the ACTIVSg2000 rule/cut CHECKPOINT.
 # Runs SuS -> failure cuts + a short survival extraction ONCE; the hybrid
 # array job (nci_hybrid_array.pbs) then estimates P(blackout) against this

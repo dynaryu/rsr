@@ -3032,6 +3032,7 @@ def run_hybrid_estimate(
     seed: Optional[int] = None,
     output_dir: Optional[str] = None,
     json_name: str = "hybrid.json",
+    verify_certified_failures: bool = True,
     verbose: bool = True,
 ) -> Dict[str, Any]:
     """Unbiased Monte-Carlo estimate of P(system fails), using the reference
@@ -3044,6 +3045,17 @@ def run_hybrid_estimate(
     plain Monte-Carlo estimator of P(failure) — the rules only remove the
     classified fraction of its sfun cost — so the usual binomial confidence
     interval applies (Wilson score, 95%).
+
+    ``verify_certified_failures`` (default True) additionally re-evaluates
+    every rule/cut-certified *failure* with ``sfun`` and counts it by the
+    true outcome. Certified failures are rare (their mass is ~p_lower, e.g.
+    362 of 1e7 samples on IEEE-118), so this is essentially free — and it
+    removes the one bias channel the coherence idealisation leaves open on
+    the failure side (the DC-OPF model violates coherence at ~1.7% near the
+    boundary via Braess-type outages; see CERTIFICATE_SUMMARY §5-6). The
+    certified-survival channel stays trusted: verifying it would cost the
+    full MC budget and prior-weighted spot checks put its exposure at
+    negligible mass.
 
     Complements :func:`run_ref_extraction_by_mcs`: the bounds
     ``[p_lower, 1 - p_upper]`` from rule extraction are rigorous but can stay
@@ -3120,40 +3132,57 @@ def run_hybrid_estimate(
             yield s, r
 
     n_upper_cert = n_fail_cert = n_fail_sfun = n_surv_sfun = 0
+    n_cert_checked = n_cert_overturned = 0
     t0 = time.perf_counter()
     t_sfun = 0.0
+
+    def _eval_idx(s, idx):
+        """sfun the samples at ``idx``; returns (n_evaluated, n_failed)."""
+        nonlocal t_sfun
+        sts = torch.argmax(s[idx], dim=2).cpu().tolist()
+        tasks = [{row_names[k]: int(row[k]) for k in range(n_vars)}
+                 for row in sts]
+        _ts = time.perf_counter()
+        if _pool is not None:
+            fails = _pool.map(_hybrid_eval_one, tasks,
+                              chunksize=max(1, len(tasks) // (n_workers * 4)))
+        else:
+            fails = [_hybrid_eval_one(t) for t in tasks]
+        t_sfun += time.perf_counter() - _ts
+        return len(tasks), int(sum(fails))
+
     done = 0
     batch_i = 0
     while done < n_sample:
         b = min(sample_batch_size, n_sample - done)
         for s, r in _classify_batch(b):
             n_upper_cert += int(r['upper'])
-            n_fail_cert += int(r['lower'])
+            if verify_certified_failures and r['idx_lower'].numel() > 0:
+                # coherence-robustness: count certified failures by the true
+                # sfun outcome (they are rare, so this is essentially free)
+                n_chk, n_true = _eval_idx(s, r['idx_lower'])
+                n_cert_checked += n_chk
+                n_cert_overturned += n_chk - n_true
+                n_fail_cert += n_true
+            else:
+                n_fail_cert += int(r['lower'])
             idx = r['idx_unknown']
             if idx.numel() > 0:
-                sts = torch.argmax(s[idx], dim=2).cpu().tolist()
-                tasks = [{row_names[k]: int(row[k]) for k in range(n_vars)}
-                         for row in sts]
-                _ts = time.perf_counter()
-                if _pool is not None:
-                    fails = _pool.map(_hybrid_eval_one, tasks,
-                                      chunksize=max(1, len(tasks) // (n_workers * 4)))
-                else:
-                    fails = [_hybrid_eval_one(t) for t in tasks]
-                t_sfun += time.perf_counter() - _ts
-                nf = int(sum(fails))
+                n_ev, nf = _eval_idx(s, idx)
                 n_fail_sfun += nf
-                n_surv_sfun += len(fails) - nf
+                n_surv_sfun += n_ev - nf
         done += b
         batch_i += 1
         if verbose and (batch_i % 10 == 0 or done >= n_sample):
             n_fail = n_fail_cert + n_fail_sfun
-            n_sfun_done = n_fail_sfun + n_surv_sfun
+            n_sfun_done = n_fail_sfun + n_surv_sfun + n_cert_checked
             dt = time.perf_counter() - t0
             eta = dt / done * (n_sample - done)
+            over = (f", {n_cert_overturned} cert overturned"
+                    if n_cert_overturned else "")
             print(f"[hybrid] {done:,}/{n_sample:,} samples  "
                   f"sfun {n_sfun_done:,}  fails {n_fail:,} "
-                  f"({n_fail_cert:,} cert + {n_fail_sfun:,} sfun)  "
+                  f"({n_fail_cert:,} cert + {n_fail_sfun:,} sfun{over})  "
                   f"p_hat {n_fail / done:.3e}  "
                   f"{dt:.0f}s elapsed, eta {eta:.0f}s", flush=True)
 
@@ -3164,7 +3193,7 @@ def run_hybrid_estimate(
         _gpu_thread_pool.shutdown(wait=False)
 
     n_fail = n_fail_cert + n_fail_sfun
-    n_sfun_total = n_fail_sfun + n_surv_sfun
+    n_sfun_total = n_fail_sfun + n_surv_sfun + n_cert_checked
     ci_low, ci_high = _wilson_interval(n_fail, n_sample)
     result = {
         "p_fail": n_fail / n_sample,
@@ -3173,6 +3202,8 @@ def run_hybrid_estimate(
         "n_fail": n_fail,
         "n_fail_certified": n_fail_cert,
         "n_fail_sfun": n_fail_sfun,
+        "n_cert_checked": n_cert_checked,
+        "n_cert_overturned": n_cert_overturned,
         "n_upper_certified": n_upper_cert,
         "n_sfun": n_sfun_total,
         "free_frac": 1.0 - n_sfun_total / n_sample,

@@ -1,5 +1,12 @@
 #!/bin/bash
 # ============================================================================
+# *** SUPERSEDED for ACTIVSg2000 — use nci_sus_estimate.pbs instead. ***
+# With 0 cuts and ~0% rule coverage (all failures congestion-driven), each
+# shard is plain MC at ~0.9 s/solve: 20 x 500k samples ~ 2,500 core-hours
+# for ~1000 failures. Subset Simulation gets the same p_f in ~20 min on one
+# node. Kept for reference (the shard/combine pattern is reusable where
+# rules DO cover mass, e.g. an IEEE-118-scale grid).
+# ============================================================================
 # NCI Gadi PBS job 2 of 2: SHARDED hybrid P(blackout) estimate (array job).
 # Each array task estimates the hybrid on an independent seed against the
 # shared checkpoint from nci_build_checkpoint.pbs, on its own node. Pooling

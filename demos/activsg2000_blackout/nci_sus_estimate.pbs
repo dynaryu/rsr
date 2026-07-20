@@ -1,0 +1,63 @@
+#!/bin/bash
+# ============================================================================
+# NCI Gadi PBS job: ACTIVSg2000 P(blackout) by SUBSET SIMULATION.
+# Submit with:  qsub nci_sus_estimate.pbs
+#
+# THIS REPLACES the checkpoint + hybrid-array plan for ACTIVSg2000. Measured
+# twice: 100% of this grid's near-boundary failures are congestion-driven, so
+# the transportation dual certifies none (0 cuts), survival boxes cover ~0%
+# (each conditions ~90% of 5206 components), and the Kirchhoff-aware cut is a
+# settled negative result (CERTIFICATE_SUMMARY §5). With no rule subsidy the
+# hybrid degenerates to plain MC at ~0.9 s/solve — intractable. Subset
+# Simulation is the tractable estimator here (Chan et al. 2024 reach
+# p_f ~ 1e-4 in ~9k solves with aE-SuS).
+#
+# One node suffices: a SuS run is ~9k solves but its chain steps evaluate
+# ~100 candidates in parallel, so a run is ~2-4 min wall on 128 cores;
+# 10 independent runs (the empirical-CI methodology) fit in well under an
+# hour. NOTE: ours is basic SuS (fixed p0, component-wise MH) — on IEEE-14 it
+# lands within ~1.5x of the reference, so read the result as
+# order-of-magnitude with an empirical CI, not a precision estimate.
+#
+# Threshold 4.7% = the p_f ~ 1e-4 level in THIS model, calibrated by
+# calibrate_threshold.py (the CDF is steep there: 3% ~ 1e-2, 4.9% ~ 1e-5).
+#
+# PREREQUISITE: the generated dataset at
+#   $RSR_ROOT/../network-datasets/datasets/ACTIVSg2000/v1  (see README note
+#   in nci_build_checkpoint.pbs).
+# ============================================================================
+#PBS -M hyeuk.ryu@ga.gov.au
+#PBS -m e
+#PBS -P n74
+#PBS -q normalsl
+#PBS -l walltime=02:00:00
+#PBS -l ncpus=128
+#PBS -l mem=256GB
+#PBS -l jobfs=24GB
+#PBS -l wd
+#PBS -l storage=scratch/y57+scratch/n74+gdata/n74
+#PBS -N activ2000_sus
+
+module load python3/3.12.1
+source /g/data/n74/hxr547/tsum/.venv/bin/activate     # torch + scipy + typer
+
+RSR_ROOT=/scratch/n74/hxr547/rsr
+cd "$RSR_ROOT/demos"
+echo "Job $PBS_JOBID on $(hostname): NCPUS=${PBS_NCPUS:-?}"
+
+python3 -u sus_estimate.py \
+    --dataset ACTIVSg2000 \
+    --threshold 4.7 \
+    --n-runs 10 \
+    --n-per-level 1000 \
+    --max-levels 15 \
+    --n-workers 128 \
+    --seed 7 \
+    --json "$RSR_ROOT/demos/activsg2000_blackout/out_sus_nci/sus_estimate.json" \
+    &> "$RSR_ROOT/demos/activsg2000_blackout/$PBS_JOBID.log"
+RC=$?
+if [ $RC -ne 0 ]; then
+    echo "sus_estimate FAILED (exit $RC) — see the log"
+    exit $RC
+fi
+echo "done: out_sus_nci/sus_estimate.json"

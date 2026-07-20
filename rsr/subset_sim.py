@@ -28,6 +28,8 @@ caller.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import torch
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -274,6 +276,7 @@ def subset_sim_search(
     chain_length = max(2, int(round(1.0 / p0)))
     # If chain_length * n_seed != n_per_level we still proceed; level size just drifts.
     level_thresholds: List[float] = []
+    cond_probs: List[float] = []          # actual P(>=b_j | prev level), per chain level
     n_sfun_total = 0
 
     # ---- Level 0: prior Monte Carlo ----
@@ -324,6 +327,12 @@ def subset_sim_search(
             terminated_by = "degenerate_threshold"
             break
 
+        # Actual conditional probability for this level: fraction of the
+        # current samples at or above the threshold. With a discrete severity
+        # this exceeds p0 (ties at b_j), so using the real fraction instead of
+        # p0 removes the discrete-CDF bias in the probability estimate.
+        cond_probs.append(float((severities >= b_j_s).sum()) / len(severities))
+
         # Shuffle seed order (standard Au & Beck practice)
         perm = np.random.permutation(n_seed)
         seed_states = seed_states[torch.from_numpy(perm).to(seed_states.device)]
@@ -361,6 +370,7 @@ def subset_sim_search(
         "failed_states": failed_states,
         "failed_fvals": failed_fvals,
         "level_thresholds": level_thresholds,
+        "cond_probs": cond_probs,
         "n_levels": len(level_thresholds),
         "n_sfun_calls": n_sfun_total,
         "final_states": states,
@@ -368,3 +378,160 @@ def subset_sim_search(
         "final_sys_sts": sys_sts,
         "terminated_by": terminated_by,
     }
+
+
+def _sus_run_pf(res: Dict[str, Any], p0: float, sys_surv_st: int) -> Dict[str, Any]:
+    """Subset-Simulation probability estimate from one search result.
+
+    p_f = (prod of per-level conditional probabilities) * (n_fail_final /
+    N_final). The final-level samples are conditional on the last threshold
+    whose CWM-H chains ran, and ``cond_probs`` holds the *actual* fraction
+    above each such threshold (which handles ties in a discrete severity;
+    it falls back to ``p0^e`` for old results without that field).
+
+    ``p_fail`` is 0.0 (and ``reached`` False) when the walk produced no
+    failures in its final level — that is inconclusive (raise ``max_levels``
+    / ``n_per_level``), not a small probability.
+    """
+    cond = res.get("cond_probs")
+    if cond is not None:
+        e = len(cond)
+        cum = 1.0
+        for c in cond:
+            cum *= c
+    else:                                     # backward-compat fallback
+        m = res["n_levels"]
+        e = max(m if res["terminated_by"] == "max_levels" else m - 1, 0)
+        cum = p0 ** e
+    sys_sts = res["final_sys_sts"]
+    n_final = int(len(sys_sts))
+    n_fail = int((sys_sts < sys_surv_st).sum()) if n_final else 0
+    pf = cum * n_fail / n_final if n_final and n_fail else 0.0
+    return {"p_fail": pf, "exponent": e, "cum_prob": cum, "n_levels": res["n_levels"],
+            "n_fail_final": n_fail, "n_final": n_final,
+            "terminated_by": res["terminated_by"],
+            "n_sfun": res["n_sfun_calls"], "reached": n_fail > 0}
+
+
+def subset_sim_estimate(
+    probs: torch.Tensor,
+    sfun: Callable,
+    row_names: List[str],
+    sys_surv_st: int,
+    *,
+    n_runs: int = 5,
+    n_per_level: int = 1000,
+    p0: float = 0.1,
+    max_levels: int = 15,
+    severity_sign: int = +1,
+    n_flip_mean: float = 5.0,
+    n_workers: int = 1,
+    seed: Optional[int] = None,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """Estimate P(failure) by Subset Simulation, with an empirical CI.
+
+    Runs ``n_runs`` **independent** SuS searches (fresh prior seeds) and
+    combines their per-run estimates. The scatter across runs gives the
+    uncertainty directly — this is the methodology of Chan et al. (2024),
+    "Adaptive Monte Carlo methods for estimating rare events in power grids"
+    (200 repetitions there) — and avoids the fragile Au & Beck intra-level
+    correlation analysis, which our discrete component-wise MH would violate.
+
+    Complements :func:`subset_sim_search` (which discards the probability and
+    keeps only failed states, for the cert cut pipeline) and the rule-based
+    hybrid estimator (``rsr.run_hybrid_estimate``): use this where the rules
+    cover ~0% of the space and the residual *is* the rare failure tail
+    (e.g. ACTIVSg2000), so plain MC on the residual is intractable.
+
+    Args:
+        probs:        (n_var, n_state) prior probabilities (moved to CPU).
+        sfun:         system function ``comps_st -> (fval, sys_st, _)``; the
+                      *graded* severity ``fval`` drives the level walk, so pass
+                      the underlying model (e.g. blackout %), not a binarised
+                      sfun.
+        row_names:    component names matching ``probs`` rows.
+        sys_surv_st:  ``sys_st < sys_surv_st`` counts as failure.
+        n_runs:       independent SuS repetitions (>=2 for a CI).
+        n_per_level:  samples per level (N); p0 the level conditional prob.
+        max_levels:   hard cap; raise it if runs report ``reached=False``.
+        n_workers:    CPU processes for the SuS sfun evaluations (fork pool).
+        seed:         base RNG seed; run r uses ``seed + r`` (torch + numpy).
+
+    Returns:
+        dict with ``p_fail`` (mean over runs that reached failures), ``ci95``
+        (log-normal interval on that mean), ``cov`` (of the mean) and
+        ``cov_single_run`` (comparable to the paper's reported c.o.v.),
+        ``per_run`` estimates, ``n_runs_no_failure`` and ``n_sfun``.
+    """
+    import multiprocessing as mp
+
+    probs = probs.detach().cpu()
+    set_worker_state(sfun, row_names, sys_surv_st)          # before fork
+    pool = mp.get_context("fork").Pool(n_workers) if n_workers > 1 else None
+
+    per_run: List[Dict[str, Any]] = []
+    total_sfun = 0
+    try:
+        for r in range(n_runs):
+            if seed is not None:
+                torch.manual_seed(seed + r)
+                np.random.seed(seed + r)
+            res = subset_sim_search(
+                probs, sfun, row_names, sys_surv_st,
+                n_per_level=n_per_level, p0=p0, max_levels=max_levels,
+                severity_sign=severity_sign, n_flip_mean=n_flip_mean,
+                pool=pool, verbose=False)
+            est = _sus_run_pf(res, p0, sys_surv_st)
+            per_run.append(est)
+            total_sfun += est["n_sfun"]
+            if verbose:
+                tag = "" if est["reached"] else "  (no failures reached!)"
+                print(f"[sus-est] run {r}: p_f={est['p_fail']:.3e}  "
+                      f"levels={est['n_levels']} e={est['exponent']} "
+                      f"n_fail_final={est['n_fail_final']}/{est['n_final']} "
+                      f"{est['terminated_by']}{tag}")
+    finally:
+        if pool is not None:
+            pool.close()
+            pool.join()
+
+    valid = [d["p_fail"] for d in per_run if d["reached"]]
+    n_zero = len(per_run) - len(valid)
+    out: Dict[str, Any] = {
+        "p_fail": float(np.mean(valid)) if valid else 0.0,
+        "n_runs": n_runs,
+        "n_runs_no_failure": n_zero,
+        "n_sfun": total_sfun,
+        "per_run": per_run,
+        "cov_single_run": None,
+        "cov": None,
+        "ci95": None,
+        "geom_mean": None,
+    }
+    if len(valid) >= 2:
+        arr = np.asarray(valid)
+        cov1 = float(arr.std(ddof=1) / arr.mean())          # ~paper's c.o.v.
+        logs = np.log(arr)
+        lm, ls = float(logs.mean()), float(logs.std(ddof=1))
+        sem = ls / math.sqrt(len(arr))
+        out.update({
+            "cov_single_run": cov1,
+            "cov": cov1 / math.sqrt(len(arr)),
+            "geom_mean": math.exp(lm),
+            "ci95": [math.exp(lm - 1.959964 * sem), math.exp(lm + 1.959964 * sem)],
+        })
+
+    if verbose:
+        p = out["p_fail"]
+        if valid:
+            ci = out["ci95"]
+            print(f"[sus-est] p_fail = {p:.3e}"
+                  + (f"  95% CI [{ci[0]:.3e}, {ci[1]:.3e}]  "
+                     f"(c.o.v. single-run {out['cov_single_run']:.2f})"
+                     if ci else "  (need n_runs>=2 for a CI)")
+                  + f"   {total_sfun:,} sfun over {n_runs} runs")
+        if n_zero:
+            print(f"[sus-est] WARNING: {n_zero}/{n_runs} runs reached no "
+                  "failures — raise --max-levels or --n-per-level.")
+    return out

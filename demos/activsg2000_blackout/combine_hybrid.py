@@ -17,9 +17,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
-# additive fields across shards
+# additive fields across shards (missing keys — e.g. shards written before
+# certified-failure verification existed — count as 0)
 SUM_KEYS = ["n_sample", "n_fail", "n_fail_certified", "n_fail_sfun",
-            "n_upper_certified", "n_sfun"]
+            "n_upper_certified", "n_sfun", "n_cert_checked",
+            "n_cert_overturned"]
 
 
 def wilson(k, n, z=1.959964):
@@ -48,7 +50,7 @@ def main():
     for s in shards:
         d = json.load(open(s))
         for k in SUM_KEYS:
-            tot[k] += d[k]
+            tot[k] += d.get(k, 0)
         seeds.append(d.get("seed"))
         per_shard.append((Path(s).parent.name, d["n_sample"], d["n_fail"]))
 

@@ -1401,7 +1401,8 @@ def test_hybrid_estimate_rules_classify_free():
     res = rsr.run_hybrid_estimate(
         sfun=sfun_guard, probs=probs, row_names=row_names, n_state=n_state,
         sys_upper_st=1, refs_mat_upper=m_up, refs_mat_lower=m_low,
-        n_sample=20_000, sample_batch_size=5_000, seed=0, verbose=False)
+        n_sample=20_000, sample_batch_size=5_000, seed=0, verbose=False,
+        verify_certified_failures=False)   # premise of this test: 0 sfun calls
     assert res['n_sfun'] == 0
     assert res['free_frac'] == 1.0
     assert res['n_fail'] == res['n_fail_certified']
@@ -1432,10 +1433,46 @@ def test_hybrid_estimate_with_cuts():
     res = rsr.run_hybrid_estimate(
         sfun=sfun_guard, probs=probs, row_names=row_names, n_state=n_state,
         sys_upper_st=1, refs_mat_upper=m_up, lower_cuts=[_StubCutX0()],
-        n_sample=10_000, sample_batch_size=2_500, seed=0, verbose=False)
+        n_sample=10_000, sample_batch_size=2_500, seed=0, verbose=False,
+        verify_certified_failures=False)   # premise of this test: 0 sfun calls
     assert res['n_sfun'] == 0
     assert res['n_fail'] == res['n_fail_certified']
     assert res['p_fail'] == pytest.approx(0.1, abs=0.03)
+
+
+def test_hybrid_estimate_verify_overturns_unsound_rule():
+    # Coherence-robustness (default-on): a failure rule that OVER-certifies
+    # (claims x0<=0 => fail, but the true system fails only when x0==0 AND
+    # x1==0) gets its certified failures re-evaluated by sfun, so the
+    # estimate stays unbiased; with verification off the same rule biases
+    # p_hat high by ~10x.
+    probs, row_names, n_state, _ = _hybrid_problem()
+    m_up = rsr.from_ref_dict_to_mat(
+        {'x0': ('>=', 1)}, row_names, n_state, device='cpu').unsqueeze(0)
+    m_low_bad = rsr.from_ref_dict_to_mat(
+        {'x0': ('<=', 0)}, row_names, n_state, device='cpu').unsqueeze(0)
+
+    def sfun_true(comps_st):                     # non-coherent w.r.t. the rule
+        st = 0 if (comps_st['x0'] == 0 and comps_st['x1'] == 0) else 1
+        return st, st, None
+
+    kw = dict(probs=probs, row_names=row_names, n_state=n_state,
+              sys_upper_st=1, refs_mat_upper=m_up, refs_mat_lower=m_low_bad,
+              n_sample=20_000, sample_batch_size=5_000, seed=3, verbose=False)
+    res_v = rsr.run_hybrid_estimate(sfun=sfun_true, **kw)   # default verify
+    res_mc = rsr.run_hybrid_estimate(
+        sfun=sfun_true, probs=probs, row_names=row_names, n_state=n_state,
+        sys_upper_st=1, n_sample=20_000, sample_batch_size=5_000,
+        seed=3, verbose=False)                               # ground truth MC
+    res_off = rsr.run_hybrid_estimate(
+        sfun=sfun_true, verify_certified_failures=False, **kw)
+
+    assert res_v['p_fail'] == res_mc['p_fail']       # verified == unbiased
+    assert res_v['n_cert_overturned'] > 0            # the bad rule was caught
+    assert res_off['p_fail'] > 5 * res_mc['p_fail']  # unverified is biased
+    # rules cover the whole space here, so the only sfun cost is the
+    # verification of the (rare-ish) certified failures
+    assert res_v['n_sfun'] == res_v['n_cert_checked'] > 0
 
 
 def test_hybrid_estimate_parallel_matches_serial():
@@ -1525,3 +1562,38 @@ def test_load_checkpoint_survives_corrupt_json(tmp_path):
     ck = blackout_lib.load_checkpoint(tmp_path, 'cpu', row_names)
     assert ck["refs_upper"] == ups
     assert len(ck["refs_mat_upper"]) == 2
+
+
+def test_subset_sim_estimate_known_pf():
+    # N independent binary comps, state 0 = "failed" with prob q; severity =
+    # number failed; system fails iff >= K failed. p_f = P(Binom(N,q) >= K),
+    # computable exactly, so we can check the SuS estimate.
+    from rsr.subset_sim import subset_sim_estimate
+    from math import comb
+
+    N, q, K = 24, 0.25, 12
+    row_names = [f"c{i}" for i in range(N)]
+    probs = torch.tensor([[q, 1.0 - q]] * N, dtype=torch.float32)  # state0=fail
+
+    def sfun(comps_st):
+        n_fail = sum(1 for k in row_names if comps_st[k] == 0)
+        return float(n_fail), (0 if n_fail >= K else 1), None  # sys_st<1 => failure
+
+    p_true = sum(comb(N, k) * q**k * (1 - q)**(N - k) for k in range(K, N + 1))
+
+    res = subset_sim_estimate(
+        probs, sfun, row_names, sys_surv_st=1,
+        n_runs=6, n_per_level=1000, p0=0.1, max_levels=15,
+        severity_sign=+1, n_workers=1, seed=0, verbose=False)
+
+    assert res["n_runs_no_failure"] == 0, "SuS failed to reach failures"
+    # SuS is noisy (our basic MH); require the mean within a factor of ~4 and
+    # the true value inside the empirical 95% CI's ballpark.
+    assert 0.25 * p_true < res["p_fail"] < 4.0 * p_true, \
+        f"p_hat={res['p_fail']:.2e} vs p_true={p_true:.2e}"
+    assert res["ci95"] is not None and res["cov"] is not None
+    assert res["ci95"][0] < res["ci95"][1]
+    # formula sanity: every run's estimate is cum_prob * n_fail_final / N
+    for d in res["per_run"]:
+        assert d["p_fail"] == pytest.approx(
+            d["cum_prob"] * d["n_fail_final"] / d["n_final"], rel=1e-9)

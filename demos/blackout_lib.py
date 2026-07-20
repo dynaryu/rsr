@@ -372,12 +372,14 @@ def hybrid_estimate(sfun, probs, row_names, n_state, out: Path, *,
           f"({res['n_sfun']:,} sfun calls for the rest)")
     print(f"  Failures:           {res['n_fail_certified']:,} rule-certified "
           f"+ {res['n_fail_sfun']:,} from sfun")
+    if res.get("n_cert_checked"):
+        print(f"  Coherence check:    {res['n_cert_checked']:,} certified "
+              f"failures re-verified by sfun, "
+              f"{res['n_cert_overturned']:,} overturned")
     print(f"  Runtime:            {res['elapsed_sec']:.1f}s "
           f"(sfun {res['t_sfun_sec']:.1f}s)")
     print(f"\n  Saved: {out/'hybrid.json'}")
     return res
-    print(f"         {Path(res['refs_upper_path']).name} / "
-          f"{Path(res['refs_lower_path']).name} (rule sets)")
 
 
 # ----------------------------------------------------------------------------
