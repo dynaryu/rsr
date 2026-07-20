@@ -1,0 +1,26 @@
+  Dataset:     /scratch/n74/hxr547/network-datasets/datasets/ACTIVSg2000/v1
+  Components:  5206 (485 generator buses, 1515 ordinary buses, 3206 branches)
+  Max states:  4   Device: cpu
+  Threshold:   4.7% blackout → system failure
+DC-OPF sfun ready: 2000 buses, 485 generators, 3206 branches
+  All operational: blackout=  0.00%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+
+Subset-Simulation estimate [aesus]: 10 runs x 1000/level, p0=0.1, threshold=4.7%
+
+[aesus] run 0: p_f=2.690e-04  levels=4 cond=['0.100', '0.100', '0.100', '0.269'] sfun=3700
+[aesus] run 1: p_f=4.030e-04  levels=4 cond=['0.100', '0.100', '0.100', '0.403'] sfun=3700
+[aesus] run 2: p_f=7.802e-04  levels=4 cond=['0.100', '0.100', '0.106', '0.736'] sfun=3694
+[aesus] run 3: p_f=3.767e-04  levels=4 cond=['0.100', '0.100', '0.101', '0.373'] sfun=3699
+[aesus] run 4: p_f=5.929e-04  levels=4 cond=['0.100', '0.100', '0.101', '0.587'] sfun=3699
+[aesus] run 5: p_f=3.070e-04  levels=4 cond=['0.100', '0.100', '0.100', '0.307'] sfun=3700
+[aesus] run 6: p_f=8.840e-04  levels=4 cond=['0.100', '0.100', '0.100', '0.884'] sfun=3700
+[aesus] run 7: p_f=2.000e-04  levels=4 cond=['0.100', '0.100', '0.101', '0.198'] sfun=3699
+[aesus] run 8: p_f=1.348e-03  levels=3 cond=['0.100', '0.107', '0.126'] sfun=2793
+[aesus] run 9: p_f=1.030e-03  levels=3 cond=['0.100', '0.100', '0.103'] sfun=2800
+[aesus] geometric mean = 5.192e-04  95% CI [3.502e-04, 7.697e-04]  arithmetic mean = 6.191e-04  (c.o.v. single-run 0.61, spread 0.8 decades)  35,184 sfun over 10 runs
+
+============================================================
+  P(blackout) = 5.192e-04   95% CI [3.502e-04, 7.697e-04]   (geometric mean; arithmetic mean 6.191e-04)
+  single-run c.o.v. = 0.61   per-run spread 0.8 decades   (35,184 sfun over 10 runs, 463s)
+  saved /scratch/n74/hxr547/rsr/demos/activsg2000_blackout/out_sus_nci/sus_estimate.json

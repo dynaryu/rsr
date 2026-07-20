@@ -5,127 +5,205 @@
   "n_per_level": 1000,
   "p0": 0.1,
   "seed": 7,
-  "p_fail": 0.0007648025696336701,
+  "p_fail": 0.000619094,
   "n_runs": 10,
   "n_runs_no_failure": 0,
-  "n_sfun": 45100,
+  "n_sfun": 35184,
   "per_run": [
     {
-      "p_fail": 1.2293225100000004e-08,
-      "exponent": 7,
-      "cum_prob": 1.0507030000000003e-07,
-      "n_levels": 8,
-      "n_fail_final": 117,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 7300,
-      "reached": true
-    },
-    {
-      "p_fail": 9.250000000000003e-05,
-      "exponent": 4,
-      "cum_prob": 0.00010000000000000003,
-      "n_levels": 5,
-      "n_fail_final": 925,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 4600,
-      "reached": true
-    },
-    {
-      "p_fail": 4.618127519999999e-06,
-      "exponent": 5,
-      "cum_prob": 1.123632e-05,
-      "n_levels": 6,
-      "n_fail_final": 411,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 5500,
-      "reached": true
-    },
-    {
-      "p_fail": 8.407559160000001e-08,
-      "exponent": 7,
-      "cum_prob": 1.1580660000000002e-07,
-      "n_levels": 8,
-      "n_fail_final": 726,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 7300,
-      "reached": true
-    },
-    {
-      "p_fail": 0.00020600000000000005,
-      "exponent": 3,
-      "cum_prob": 0.0010000000000000002,
+      "p_fail": 0.0002690000000000001,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.1,
+        0.269
+      ],
+      "thresholds": [
+        2.70719,
+        1.7782370000000003,
+        0.6596609999999998,
+        0.0
+      ],
       "n_levels": 4,
-      "n_fail_final": 206,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
       "n_sfun": 3700,
-      "reached": true
-    },
-    {
-      "p_fail": 0.00011032320000000002,
-      "exponent": 4,
-      "cum_prob": 0.00013056000000000002,
-      "n_levels": 5,
-      "n_fail_final": 845,
-      "n_final": 1000,
       "terminated_by": "failure_boundary",
-      "n_sfun": 4600,
       "reached": true
     },
     {
-      "p_fail": 0.0026300000000000004,
-      "exponent": 2,
-      "cum_prob": 0.010000000000000002,
-      "n_levels": 3,
-      "n_fail_final": 263,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 2800,
-      "reached": true
-    },
-    {
-      "p_fail": 0.0010000000000000002,
-      "exponent": 2,
-      "cum_prob": 0.010000000000000002,
-      "n_levels": 3,
-      "n_fail_final": 100,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 2800,
-      "reached": true
-    },
-    {
-      "p_fail": 0.0026967000000000002,
-      "exponent": 2,
-      "cum_prob": 0.010100000000000001,
-      "n_levels": 3,
-      "n_fail_final": 267,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
-      "n_sfun": 2800,
-      "reached": true
-    },
-    {
-      "p_fail": 0.0009077880000000001,
-      "exponent": 3,
-      "cum_prob": 0.0010605,
+      "p_fail": 0.00040300000000000015,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.1,
+        0.403
+      ],
+      "thresholds": [
+        2.808414,
+        1.8465610000000003,
+        0.5219839999999998,
+        0.0
+      ],
       "n_levels": 4,
-      "n_fail_final": 856,
-      "n_final": 1000,
-      "terminated_by": "failure_boundary",
       "n_sfun": 3700,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0007801600000000001,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.106,
+        0.736
+      ],
+      "thresholds": [
+        2.7464150000000003,
+        1.759792,
+        0.2544330000000006,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3694,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0003767300000000001,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.101,
+        0.373
+      ],
+      "thresholds": [
+        2.7321920000000004,
+        1.661959,
+        0.38691800000000054,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3699,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0005928700000000001,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.101,
+        0.587
+      ],
+      "thresholds": [
+        2.78388,
+        1.7546970000000002,
+        0.3099730000000003,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3699,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0003070000000000001,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.1,
+        0.307
+      ],
+      "thresholds": [
+        2.78174,
+        1.6512260000000003,
+        0.4977489999999998,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3700,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0008840000000000002,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.1,
+        0.884
+      ],
+      "thresholds": [
+        2.7349250000000005,
+        1.5965920000000002,
+        0.11800999999999995,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3700,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.00019998000000000007,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.101,
+        0.198
+      ],
+      "thresholds": [
+        2.782662,
+        1.7720130000000003,
+        0.6809580000000004,
+        0.0
+      ],
+      "n_levels": 4,
+      "n_sfun": 3699,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.0013482000000000001,
+      "cond_probs": [
+        0.1,
+        0.107,
+        0.126
+      ],
+      "thresholds": [
+        2.712724,
+        1.4059210000000002,
+        0.0
+      ],
+      "n_levels": 3,
+      "n_sfun": 2793,
+      "terminated_by": "failure_boundary",
+      "reached": true
+    },
+    {
+      "p_fail": 0.00103,
+      "cond_probs": [
+        0.1,
+        0.1,
+        0.103
+      ],
+      "thresholds": [
+        2.724951,
+        1.47988,
+        0.0
+      ],
+      "n_levels": 3,
+      "n_sfun": 2800,
+      "terminated_by": "failure_boundary",
       "reached": true
     }
   ],
-  "cov_single_run": 1.3938183875843668,
-  "cov": 0.44076407493899544,
+  "cov_single_run": 0.613494603840382,
+  "cov": 0.194004028035829,
   "ci95": [
-    3.3090590707672558e-06,
-    0.0006955775272842323
+    0.00035021771013926315,
+    0.0007697359732210089
   ],
-  "geom_mean": 4.79761099515347e-05
+  "geom_mean": 0.0005192062884377258,
+  "log10_spread": 0.8287677587585988,
+  "converged": true
 }
