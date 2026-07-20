@@ -1,0 +1,131 @@
+{
+  "dataset": "ACTIVSg2000",
+  "threshold": 4.7,
+  "alpha": 2.0,
+  "n_per_level": 1000,
+  "p0": 0.1,
+  "seed": 7,
+  "p_fail": 0.0007648025696336701,
+  "n_runs": 10,
+  "n_runs_no_failure": 0,
+  "n_sfun": 45100,
+  "per_run": [
+    {
+      "p_fail": 1.2293225100000004e-08,
+      "exponent": 7,
+      "cum_prob": 1.0507030000000003e-07,
+      "n_levels": 8,
+      "n_fail_final": 117,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 7300,
+      "reached": true
+    },
+    {
+      "p_fail": 9.250000000000003e-05,
+      "exponent": 4,
+      "cum_prob": 0.00010000000000000003,
+      "n_levels": 5,
+      "n_fail_final": 925,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 4600,
+      "reached": true
+    },
+    {
+      "p_fail": 4.618127519999999e-06,
+      "exponent": 5,
+      "cum_prob": 1.123632e-05,
+      "n_levels": 6,
+      "n_fail_final": 411,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 5500,
+      "reached": true
+    },
+    {
+      "p_fail": 8.407559160000001e-08,
+      "exponent": 7,
+      "cum_prob": 1.1580660000000002e-07,
+      "n_levels": 8,
+      "n_fail_final": 726,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 7300,
+      "reached": true
+    },
+    {
+      "p_fail": 0.00020600000000000005,
+      "exponent": 3,
+      "cum_prob": 0.0010000000000000002,
+      "n_levels": 4,
+      "n_fail_final": 206,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 3700,
+      "reached": true
+    },
+    {
+      "p_fail": 0.00011032320000000002,
+      "exponent": 4,
+      "cum_prob": 0.00013056000000000002,
+      "n_levels": 5,
+      "n_fail_final": 845,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 4600,
+      "reached": true
+    },
+    {
+      "p_fail": 0.0026300000000000004,
+      "exponent": 2,
+      "cum_prob": 0.010000000000000002,
+      "n_levels": 3,
+      "n_fail_final": 263,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 2800,
+      "reached": true
+    },
+    {
+      "p_fail": 0.0010000000000000002,
+      "exponent": 2,
+      "cum_prob": 0.010000000000000002,
+      "n_levels": 3,
+      "n_fail_final": 100,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 2800,
+      "reached": true
+    },
+    {
+      "p_fail": 0.0026967000000000002,
+      "exponent": 2,
+      "cum_prob": 0.010100000000000001,
+      "n_levels": 3,
+      "n_fail_final": 267,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 2800,
+      "reached": true
+    },
+    {
+      "p_fail": 0.0009077880000000001,
+      "exponent": 3,
+      "cum_prob": 0.0010605,
+      "n_levels": 4,
+      "n_fail_final": 856,
+      "n_final": 1000,
+      "terminated_by": "failure_boundary",
+      "n_sfun": 3700,
+      "reached": true
+    }
+  ],
+  "cov_single_run": 1.3938183875843668,
+  "cov": 0.44076407493899544,
+  "ci95": [
+    3.3090590707672558e-06,
+    0.0006955775272842323
+  ],
+  "geom_mean": 4.79761099515347e-05
+}

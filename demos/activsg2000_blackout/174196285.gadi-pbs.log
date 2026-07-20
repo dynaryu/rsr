@@ -1,0 +1,26 @@
+  Dataset:     /scratch/n74/hxr547/network-datasets/datasets/ACTIVSg2000/v1
+  Components:  5206 (485 generator buses, 1515 ordinary buses, 3206 branches)
+  Max states:  4   Device: cpu
+  Threshold:   4.7% blackout → system failure
+DC-OPF sfun ready: 2000 buses, 485 generators, 3206 branches
+  All operational: blackout=  0.00%  sys_st=1
+  All failed:      blackout=100.00%  sys_st=0
+
+Subset-Simulation estimate: 10 runs x 1000/level, p0=0.1, threshold=4.7%
+
+[sus-est] run 0: p_f=1.229e-08  levels=8 e=7 n_fail_final=117/1000 failure_boundary
+[sus-est] run 1: p_f=9.250e-05  levels=5 e=4 n_fail_final=925/1000 failure_boundary
+[sus-est] run 2: p_f=4.618e-06  levels=6 e=5 n_fail_final=411/1000 failure_boundary
+[sus-est] run 3: p_f=8.408e-08  levels=8 e=7 n_fail_final=726/1000 failure_boundary
+[sus-est] run 4: p_f=2.060e-04  levels=4 e=3 n_fail_final=206/1000 failure_boundary
+[sus-est] run 5: p_f=1.103e-04  levels=5 e=4 n_fail_final=845/1000 failure_boundary
+[sus-est] run 6: p_f=2.630e-03  levels=3 e=2 n_fail_final=263/1000 failure_boundary
+[sus-est] run 7: p_f=1.000e-03  levels=3 e=2 n_fail_final=100/1000 failure_boundary
+[sus-est] run 8: p_f=2.697e-03  levels=3 e=2 n_fail_final=267/1000 failure_boundary
+[sus-est] run 9: p_f=9.078e-04  levels=4 e=3 n_fail_final=856/1000 failure_boundary
+[sus-est] p_fail = 7.648e-04  95% CI [3.309e-06, 6.956e-04]  (c.o.v. single-run 1.39)   45,100 sfun over 10 runs
+
+============================================================
+  P(blackout) = 7.648e-04   95% CI [3.309e-06, 6.956e-04]
+  single-run c.o.v. = 1.39   (45,100 sfun over 10 runs, 641s)
+  saved /scratch/n74/hxr547/rsr/demos/activsg2000_blackout/out_sus_nci/sus_estimate.json
